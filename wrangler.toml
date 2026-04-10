@@ -1,0 +1,7 @@
+name = "chebar-dashboard"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "."
+
+[[kv_namespaces]]
+binding = "CHEBAR_DATA"
+id = "63b9962709f1410e95852eff145ce57e"

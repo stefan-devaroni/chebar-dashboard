@@ -490,14 +490,40 @@ let S = {
   importLog: []
 };
 
-function load() {
+const API = '/api/state';
+let _saveTimer = null;
+
+async function load() {
+  // Try cloud first, fall back to localStorage
   try {
-    const d = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (d) S = { ...S, ...d };
-  } catch(e) {}
+    const res = await fetch(API);
+    if (res.ok) {
+      const d = await res.json();
+      if (d && Object.keys(d).length) { S = { ...S, ...d }; }
+      else {
+        // Cloud empty — try localStorage for migration
+        const local = JSON.parse(localStorage.getItem(STORE_KEY));
+        if (local) { S = { ...S, ...local }; save(); }
+      }
+    }
+  } catch(e) {
+    // Offline — use localStorage
+    try {
+      const d = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (d) S = { ...S, ...d };
+    } catch(e2) {}
+  }
   if (!S.weekStart) S.weekStart = fmtDate(getMonday(new Date()));
 }
-function save() { localStorage.setItem(STORE_KEY, JSON.stringify(S)); }
+
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(S));
+  // Debounce cloud save (300ms) so rapid edits don't spam the API
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    fetch(API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(S) }).catch(() => {});
+  }, 300);
+}
 
 /* ═══════════════════════════════════════════════════
    HELPERS
@@ -1372,8 +1398,8 @@ document.addEventListener('keydown', e => {
 /* ═══════════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════════ */
-function init() {
-  load();
+async function init() {
+  await load();
   // Set default manual date to today
   $('manual-date').value = fmtDate(new Date());
   switchTab(S.activeTab || 'schedule');
