@@ -153,9 +153,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 .shift-tag.am{background:var(--gold);color:#7A6320}
 .shift-tag.pm{background:#D4C5F0;color:#5B3E8A}
 .emp-item .emp-days{font-size:10px;color:var(--text3);min-width:38px;text-align:right}
-.emp-item .emp-del{font-size:15px;color:var(--text3);cursor:pointer;opacity:0;transition:opacity .15s}
-.emp-item:hover .emp-del{opacity:1}
-.emp-item .emp-del:hover{color:var(--danger)}
+.emp-actions{display:flex;gap:2px;flex-shrink:0}
+.emp-edit,.emp-del{font-size:13px;color:var(--text3);cursor:pointer;opacity:0;transition:opacity .15s;padding:2px 4px;border-radius:3px}
+.emp-item:hover .emp-edit,.emp-item:hover .emp-del{opacity:1}
+.emp-edit:hover{color:var(--ocean);background:var(--foh-bg)}
+.emp-del:hover{color:var(--danger);background:#FDE8E8}
 .sunday-rule{margin-top:4px}
 .sunday-rule .rule-item{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px}
 .rule-item .rule-status{width:8px;height:8px;border-radius:50%}
@@ -280,9 +282,96 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 /* Animation */
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .fade-in{animation:fadeIn .3s ease}
+
+/* Hamburger */
+.hamburger{display:none;position:fixed;top:12px;left:12px;z-index:1100;width:40px;height:40px;border-radius:var(--r);background:var(--sidebar-bg);color:#F2E8DC;align-items:center;justify-content:center;box-shadow:var(--sh-lg);border:none;cursor:pointer}
+.hamburger svg{width:22px;height:22px}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1049}
+
+/* ═══════════════════════════════════════════
+   MOBILE RESPONSIVE
+   ═══════════════════════════════════════════ */
+@media(max-width:768px){
+  .hamburger{display:flex}
+  .sidebar{position:fixed;left:-260px;top:0;bottom:0;z-index:1050;width:250px;transition:left .25s ease;box-shadow:4px 0 20px rgba(0,0,0,.2)}
+  .sidebar.open{left:0}
+  .sidebar-overlay.open{display:block}
+  .main{width:100%}
+  .tab-content{padding:16px 14px;padding-top:60px}
+  .tab-header{flex-direction:column;align-items:flex-start;gap:10px}
+  .tab-header h2{font-size:20px}
+
+  /* Schedule mobile */
+  .week-nav{flex-wrap:wrap;gap:6px}
+  .week-nav .week-range{min-width:auto;font-size:13px}
+  .schedule-layout{flex-direction:column}
+  .schedule-grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -14px;padding:0 14px}
+  .schedule-grid{min-width:600px;grid-template-columns:70px repeat(7,1fr)}
+  .sg-cell{min-height:90px;padding:5px}
+  .emp-chip{font-size:10px;padding:1px 6px}
+  .cell-footer{flex-wrap:wrap;gap:2px}
+  .staff-count{font-size:8px}
+  .add-btn{width:20px;height:20px;font-size:13px}
+  .sg-shift-label span{font-size:11px}
+  .sg-shift-label small{font-size:9px}
+  .sg-shift-label .shift-req{font-size:9px}
+  .sg-day-header .day-name{font-size:9px}
+  .sg-day-header .day-num{font-size:14px}
+
+  /* Employee panel mobile */
+  .emp-panel{width:100%}
+  .emp-item .emp-edit,.emp-item .emp-del{opacity:1}
+  .add-emp-form{flex-wrap:wrap}
+  .add-emp-form input{flex:1 1 100px}
+
+  /* Orders table mobile */
+  .orders-table{font-size:12px}
+  .orders-table th,.orders-table td{padding:6px 8px}
+  .orders-table th:nth-child(5),.orders-table td:nth-child(5){display:none}
+
+  /* Tasks mobile */
+  .task-card{padding:12px}
+  .task-del,.task-card .task-edit-btn{opacity:1!important}
+  .task-meta{gap:6px;font-size:11px}
+
+  /* Sales mobile */
+  .sales-cards{grid-template-columns:1fr 1fr}
+  .sale-card{padding:14px}
+  .sale-card .sc-amount{font-size:20px}
+  .charts-row{grid-template-columns:1fr}
+  .sales-bottom{grid-template-columns:1fr}
+  .manual-entry-form{flex-direction:column}
+  .manual-entry-form input{width:100%}
+  .manual-entry-form .fg{width:100%}
+  .period-btns button{padding:6px 10px;font-size:11px}
+
+  /* Modal mobile */
+  .modal{padding:20px;width:95%;max-height:90vh;overflow-y:auto}
+
+  /* Popover mobile */
+  .assign-popover{width:180px;max-height:260px}
+
+  /* Toolbar mobile */
+  .toolbar{gap:6px}
+  .toolbar .primary-btn{padding:8px 12px;font-size:12px}
+  #order-search{width:100%!important}
+}
+
+@media(max-width:400px){
+  .sales-cards{grid-template-columns:1fr}
+  .schedule-grid{min-width:520px;grid-template-columns:55px repeat(7,1fr)}
+  .sg-shift-label span{font-size:10px}
+  .emp-chip{font-size:9px;padding:1px 4px}
+}
 </style>
 </head>
 <body>
+
+<!-- Hamburger (mobile) -->
+<button class="hamburger" onclick="toggleSidebar()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+<div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <!-- ════════════════════ SIDEBAR ════════════════════ -->
 <aside class="sidebar">
@@ -559,6 +648,14 @@ function fmt$(n) { return '$' + Number(n).toLocaleString('en-US',{minimumFractio
 function fmtPct(n) { return (n >= 0 ? '+' : '') + n.toFixed(1) + '%'; }
 
 /* ═══════════════════════════════════════════════════
+   SIDEBAR TOGGLE (mobile)
+   ═══════════════════════════════════════════════════ */
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.querySelector('.sidebar-overlay').classList.toggle('open');
+}
+
+/* ═══════════════════════════════════════════════════
    TAB SWITCHING
    ═══════════════════════════════════════════════════ */
 function switchTab(tab) {
@@ -569,6 +666,9 @@ function switchTab(tab) {
   $(('tab-' + tab)).classList.add('active');
   document.querySelectorAll('.sidebar-nav button').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
   if (tab === 'sales') setTimeout(renderSalesCharts, 50);
+  // Close sidebar on mobile
+  document.querySelector('.sidebar').classList.remove('open');
+  document.querySelector('.sidebar-overlay').classList.remove('open');
   save();
 }
 
@@ -760,6 +860,46 @@ function toggleShift(empId, shift) {
   renderEmpPanel();
 }
 
+function editEmployee(id) {
+  const emp = S.employees.find(e => e.id === id);
+  if (!emp) return;
+  $('modal').innerHTML = `
+    <h3>Edit Employee</h3>
+    <div class="form-group"><label>Name</label><input id="edit-emp-name" value="${emp.name}" maxlength="20"></div>
+    <div class="form-group"><label>Role</label><select id="edit-emp-role">
+      <option value="BOH" ${emp.role==='BOH'?'selected':''}>Back of House (BOH)</option>
+      <option value="FOH" ${emp.role==='FOH'?'selected':''}>Front of House (FOH)</option>
+    </select></div>
+    <div class="form-group" style="display:flex;gap:16px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="edit-emp-am" ${emp.morning!==false?'checked':''}> Morning Shift
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="edit-emp-pm" ${emp.night!==false?'checked':''}> Night Shift
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="cancel-btn" onclick="closeModal()">Cancel</button>
+      <button class="save-btn" onclick="saveEditEmployee('${id}')">Save</button>
+    </div>`;
+  openModal();
+}
+
+function saveEditEmployee(id) {
+  const emp = S.employees.find(e => e.id === id);
+  if (!emp) return;
+  const name = $('edit-emp-name').value.trim();
+  if (!name) { alert('Enter a name'); return; }
+  emp.name = name;
+  emp.role = $('edit-emp-role').value;
+  emp.morning = $('edit-emp-am').checked;
+  emp.night = $('edit-emp-pm').checked;
+  if (!emp.morning && !emp.night) emp.morning = true;
+  save();
+  closeModal();
+  renderSchedule();
+}
+
 function removeEmployee(id) {
   if (!confirm('Remove this employee? They will be unassigned from all shifts.')) return;
   S.employees = S.employees.filter(e => e.id !== id);
@@ -798,7 +938,10 @@ function renderEmpPanel() {
         <span class="shift-tag pm ${pm?'active':''}" onclick="toggleShift('${e.id}','night')" title="Night shift">PM</span>
       </div>
       <span class="emp-days">${d} days</span>
-      <span class="emp-del" onclick="removeEmployee('${e.id}')">&times;</span>
+      <div class="emp-actions">
+        <span class="emp-edit" onclick="editEmployee('${e.id}')" title="Edit">&#9998;</span>
+        <span class="emp-del" onclick="removeEmployee('${e.id}')" title="Remove">&times;</span>
+      </div>
     </div>`;
   }
 
