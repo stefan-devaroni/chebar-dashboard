@@ -1023,7 +1023,8 @@ function saveOrder(editId) {
   }
   save();
   closeModal();
-  renderOrders();
+  // Small delay to ensure modal is fully closed before rendering
+  setTimeout(renderOrders, 50);
 }
 
 function deleteOrder(id) {
@@ -1050,10 +1051,12 @@ function renderOrders() {
 
   if (!items.length) {
     $('orders-body').innerHTML = '';
-    $('orders-empty').style.display = S.orders.length ? 'block' : 'block';
+    document.querySelector('.orders-table').style.display = 'none';
+    $('orders-empty').style.display = 'block';
     $('orders-empty').textContent = S.orders.length ? 'No orders match your filters.' : 'No orders yet. Click "+ New Order" to add one.';
     return;
   }
+  document.querySelector('.orders-table').style.display = '';
   $('orders-empty').style.display = 'none';
   $('orders-body').innerHTML = items.map(o => `<tr>
     <td><strong>${o.product}</strong></td>
@@ -1114,7 +1117,7 @@ function saveTask(editId) {
   }
   save();
   closeModal();
-  renderTasks();
+  setTimeout(renderTasks, 50);
 }
 
 function toggleTask(id) {
