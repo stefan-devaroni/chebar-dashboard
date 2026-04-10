@@ -481,7 +481,7 @@ tr:hover .stock-del,tr:hover .stock-edit{opacity:1}
     </div>
 
     <!-- Sub-tab: Stock List -->
-    <div id="subtab-stock" class="subtab-content">
+    <div id="subtab-stock" class="subtab-content active">
       <div class="toolbar">
         <button class="primary-btn" style="background:var(--ocean)" onclick="generateOrder()">&#128230; Generate Order</button>
         <button class="primary-btn" onclick="openOrderModal()">+ Add Item</button>
@@ -511,7 +511,7 @@ tr:hover .stock-del,tr:hover .stock-edit{opacity:1}
     </div>
 
     <!-- Sub-tab: Purchase Orders -->
-    <div id="subtab-po" class="subtab-content" style="display:none">
+    <div id="subtab-po" class="subtab-content">
       <div class="toolbar">
         <select id="po-status-filter" onchange="renderPurchaseOrders()" style="padding:8px 12px;border-radius:var(--r)">
           <option value="all">All Orders</option>
@@ -1284,8 +1284,8 @@ function switchSubTab(tab) {
   document.querySelectorAll('.sub-tab').forEach((btn, i) => {
     btn.classList.toggle('active', (tab === 'stock' && i === 0) || (tab === 'po' && i === 1));
   });
-  $('subtab-stock').style.display = tab === 'stock' ? '' : 'none';
-  $('subtab-po').style.display = tab === 'po' ? '' : 'none';
+  $('subtab-stock').classList.toggle('active', tab === 'stock');
+  $('subtab-po').classList.toggle('active', tab === 'po');
   if (tab === 'po') renderPurchaseOrders();
 }
 
