@@ -665,7 +665,10 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   $(('tab-' + tab)).classList.add('active');
   document.querySelectorAll('.sidebar-nav button').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
-  if (tab === 'sales') setTimeout(renderSalesCharts, 50);
+  if (tab === 'schedule') renderSchedule();
+  if (tab === 'orders') renderOrders();
+  if (tab === 'tasks') renderTasks();
+  if (tab === 'sales') { renderSalesCards(); setTimeout(renderSalesCharts, 50); renderSalesTable(); }
   // Close sidebar on mobile
   document.querySelector('.sidebar').classList.remove('open');
   document.querySelector('.sidebar-overlay').classList.remove('open');
@@ -1022,9 +1025,10 @@ function saveOrder(editId) {
     S.orders.push(data);
   }
   save();
+  $('modal').innerHTML = '';
   closeModal();
-  // Small delay to ensure modal is fully closed before rendering
-  setTimeout(renderOrders, 50);
+  renderOrders();
+  setTimeout(renderOrders, 300);
 }
 
 function deleteOrder(id) {
@@ -1116,8 +1120,10 @@ function saveTask(editId) {
     S.tasks.push(data);
   }
   save();
+  $('modal').innerHTML = '';
   closeModal();
-  setTimeout(renderTasks, 50);
+  renderTasks();
+  setTimeout(renderTasks, 300);
 }
 
 function toggleTask(id) {
