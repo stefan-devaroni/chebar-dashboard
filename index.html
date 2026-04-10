@@ -179,6 +179,23 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 .toolbar .primary-btn:hover{background:var(--accent-h)}
 
 /* Orders table */
+.sub-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border)}
+.sub-tab{padding:10px 20px;font-size:14px;font-weight:600;color:var(--text3);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.sub-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.sub-tab:hover{color:var(--text)}
+.po-card{background:var(--card);border-radius:var(--r-lg);box-shadow:var(--sh);margin-bottom:16px;overflow:hidden}
+.po-header{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);cursor:pointer}
+.po-header:hover{background:#FEFCFA}
+.po-header h4{margin:0;font-size:15px;font-weight:600}
+.po-date{font-size:12px;color:var(--text3)}
+.po-supplier-group{padding:12px 16px;border-bottom:1px solid #F5F0EB}
+.po-supplier-group:last-child{border-bottom:none}
+.po-supplier-name{font-weight:600;font-size:14px;color:var(--ocean);margin-bottom:8px}
+.po-item{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.po-item-name{flex:1}.po-item-qty{font-weight:600;min-width:80px;text-align:right}
+.po-status-badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600}
+.po-status-badge.pending{background:#FFF3E0;color:#E65100}
+.po-status-badge.received{background:#E8F5E9;color:#2E7D32}
 .orders-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh)}
 .orders-table th{background:#F8F4F0;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);font-weight:600;text-align:left;border-bottom:1px solid var(--border)}
 .orders-table td{padding:8px 12px;border-bottom:1px solid #F5F0EB;vertical-align:middle}
@@ -456,34 +473,55 @@ tr:hover .stock-del,tr:hover .stock-edit{opacity:1}
   <!-- ──────── ORDERS TAB ──────── -->
   <section id="tab-orders" class="tab-content">
     <div class="tab-header">
-      <h2>Stock List</h2>
+      <h2>Orders &amp; Inventory</h2>
     </div>
-    <div class="toolbar">
-      <button class="primary-btn" style="background:var(--ocean)" onclick="generateOrder()">&#128230; Generate Order</button>
-      <button class="primary-btn" onclick="openOrderModal()">+ Add Item</button>
-      <select id="order-cat-filter" onchange="renderOrders()" style="padding:8px 12px;border-radius:var(--r)">
-        <option value="all">All Categories</option>
-        <option value="Produce">Produce</option>
-        <option value="Proteins">Proteins</option>
-        <option value="Dairy & Cheese">Dairy & Cheese</option>
-        <option value="Bread & Dough">Bread & Dough</option>
-        <option value="Sauces & Condiments">Sauces & Condiments</option>
-        <option value="Dry Goods & Pantry">Dry Goods & Pantry</option>
-        <option value="Coffee & Tea">Coffee & Tea</option>
-        <option value="Juices & Mixers">Juices & Mixers</option>
-        <option value="Spirits & Liqueurs">Spirits & Liqueurs</option>
-        <option value="Wine">Wine</option>
-        <option value="Beer">Beer</option>
-        <option value="Frozen">Frozen</option>
-      </select>
-      <input type="text" id="order-search" placeholder="Search..." oninput="renderOrders()" style="padding:8px 12px;border-radius:var(--r);width:160px">
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="switchSubTab('stock')">Stock List</button>
+      <button class="sub-tab" onclick="switchSubTab('po')">Orders</button>
     </div>
-    <table class="orders-table">
-      <thead><tr>
-        <th>Product</th><th>Par Stock</th><th>Current</th><th>Order Qty</th><th></th>
-      </tr></thead>
-      <tbody id="orders-body"></tbody>
-    </table>
+
+    <!-- Sub-tab: Stock List -->
+    <div id="subtab-stock" class="subtab-content">
+      <div class="toolbar">
+        <button class="primary-btn" style="background:var(--ocean)" onclick="generateOrder()">&#128230; Generate Order</button>
+        <button class="primary-btn" onclick="openOrderModal()">+ Add Item</button>
+        <select id="order-cat-filter" onchange="renderOrders()" style="padding:8px 12px;border-radius:var(--r)">
+          <option value="all">All Categories</option>
+          <option value="Produce">Produce</option>
+          <option value="Proteins">Proteins</option>
+          <option value="Dairy & Cheese">Dairy & Cheese</option>
+          <option value="Bread & Dough">Bread & Dough</option>
+          <option value="Sauces & Condiments">Sauces & Condiments</option>
+          <option value="Dry Goods & Pantry">Dry Goods & Pantry</option>
+          <option value="Coffee & Tea">Coffee & Tea</option>
+          <option value="Juices & Mixers">Juices & Mixers</option>
+          <option value="Spirits & Liqueurs">Spirits & Liqueurs</option>
+          <option value="Wine">Wine</option>
+          <option value="Beer">Beer</option>
+          <option value="Frozen">Frozen</option>
+        </select>
+        <input type="text" id="order-search" placeholder="Search..." oninput="renderOrders()" style="padding:8px 12px;border-radius:var(--r);width:160px">
+      </div>
+      <table class="orders-table">
+        <thead><tr>
+          <th>Product</th><th>Par Stock</th><th>Current</th><th>Order Qty</th><th></th>
+        </tr></thead>
+        <tbody id="orders-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Sub-tab: Purchase Orders -->
+    <div id="subtab-po" class="subtab-content" style="display:none">
+      <div class="toolbar">
+        <select id="po-status-filter" onchange="renderPurchaseOrders()" style="padding:8px 12px;border-radius:var(--r)">
+          <option value="all">All Orders</option>
+          <option value="Pending">Pending</option>
+          <option value="Received">Received</option>
+        </select>
+      </div>
+      <div id="po-list"></div>
+      <p id="po-empty" style="text-align:center;padding:40px;color:var(--text3)">No orders yet. Generate an order from the Stock List tab.</p>
+    </div>
   </section>
 
   <!-- ──────── TASKS TAB ──────── -->
@@ -598,6 +636,7 @@ let S = {
   schedule: {},
   orders: [],
   stock: {},
+  purchaseOrders: [],
   tasks: [],
   sales2025: {},
   sales2026: {},
@@ -1241,6 +1280,15 @@ function initStock() {
   // Also keep any custom items the user added
 }
 
+function switchSubTab(tab) {
+  document.querySelectorAll('.sub-tab').forEach((btn, i) => {
+    btn.classList.toggle('active', (tab === 'stock' && i === 0) || (tab === 'po' && i === 1));
+  });
+  $('subtab-stock').style.display = tab === 'stock' ? '' : 'none';
+  $('subtab-po').style.display = tab === 'po' ? '' : 'none';
+  if (tab === 'po') renderPurchaseOrders();
+}
+
 function openOrderModal(editKey) {
   const isEdit = editKey && S.stock[editKey];
   const o = isEdit ? { product: editKey, ...S.stock[editKey] } : null;
@@ -1253,6 +1301,8 @@ function openOrderModal(editKey) {
     <div class="form-group"><label>Unit</label><select id="o-unit">
       ${['lbs','cases','each','bottles','bags','boxes','gallons','kg','packs','bunches','loaves','jars','cans','bars','tubs'].map(u => `<option ${o&&o.unit===u?'selected':''}>${u}</option>`).join('')}
     </select></div>
+    <div class="form-group"><label>Supplier</label><input id="o-supplier" value="${o&&o.supplier?o.supplier:''}"></div>
+    <div class="form-group"><label>Backup Supplier</label><input id="o-backup" value="${o&&o.backup?o.backup:''}"></div>
     <div class="modal-actions">
       <button class="cancel-btn" onclick="closeModal()">Cancel</button>
       <button class="save-btn" onclick="saveOrder('${isEdit?editKey:''}')">${o?'Update':'Add'}</button>
@@ -1265,18 +1315,20 @@ function saveOrder(editKey) {
   if (!newName) { alert('Enter a product name'); return; }
   const cat = $('o-cat').value;
   const unit = $('o-unit').value;
+  const supplier = $('o-supplier').value.trim();
+  const backup = $('o-backup').value.trim();
   if (editKey && editKey !== newName) {
-    // Renamed — move data to new key
     const old = S.stock[editKey] || { par: 0, current: 0, orderQty: 0 };
     delete S.stock[editKey];
-    S.stock[newName] = { ...old, category: cat, unit: unit };
-    // Update master list too
+    S.stock[newName] = { ...old, category: cat, unit, supplier, backup };
     const mi = STOCK_MASTER.findIndex(i => i.product === editKey);
     if (mi >= 0) STOCK_MASTER[mi].product = newName;
   } else {
     if (!S.stock[newName]) S.stock[newName] = { par: 0, current: 0, orderQty: 0 };
     S.stock[newName].category = cat;
     S.stock[newName].unit = unit;
+    S.stock[newName].supplier = supplier;
+    S.stock[newName].backup = backup;
   }
   save();
   $('modal').innerHTML = '';
@@ -1398,13 +1450,123 @@ function copyOrderText() {
 }
 
 function confirmOrder() {
+  // Collect items and group by supplier
+  const items = [];
   Object.keys(S.stock).forEach(key => {
-    if (S.stock[key].orderQty > 0) S.stock[key].orderQty = 0;
+    const s = S.stock[key];
+    if (s.orderQty && s.orderQty > 0) {
+      items.push({ product: key, qty: s.orderQty, unit: s.unit, category: s.category, supplier: s.supplier || '', backup: s.backup || '' });
+      s.orderQty = 0;
+    }
+  });
+  // Create purchase order
+  if (!S.purchaseOrders) S.purchaseOrders = [];
+  S.purchaseOrders.unshift({
+    id: uid(),
+    date: new Date().toISOString(),
+    items: items,
+    status: 'Pending'
   });
   save();
   $('modal').innerHTML = '';
   closeModal();
   renderOrders();
+  switchSubTab('po');
+}
+
+function renderPurchaseOrders() {
+  if (!S.purchaseOrders) S.purchaseOrders = [];
+  const filter = $('po-status-filter').value;
+  let orders = [...S.purchaseOrders];
+  if (filter !== 'all') orders = orders.filter(o => o.status === filter);
+
+  if (!orders.length) {
+    $('po-list').innerHTML = '';
+    $('po-empty').style.display = 'block';
+    $('po-empty').textContent = S.purchaseOrders.length ? 'No orders match this filter.' : 'No orders yet. Generate an order from the Stock List tab.';
+    return;
+  }
+  $('po-empty').style.display = 'none';
+
+  $('po-list').innerHTML = orders.map(po => {
+    const d = new Date(po.date);
+    const dateStr = d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const itemCount = po.items.length;
+
+    // Group items by supplier
+    const bySupplier = {};
+    po.items.forEach(item => {
+      const sup = item.supplier || 'No Supplier Assigned';
+      if (!bySupplier[sup]) bySupplier[sup] = [];
+      bySupplier[sup].push(item);
+    });
+
+    let supplierHtml = '';
+    Object.keys(bySupplier).sort((a, b) => {
+      if (a === 'No Supplier Assigned') return 1;
+      if (b === 'No Supplier Assigned') return -1;
+      return a.localeCompare(b);
+    }).forEach(sup => {
+      supplierHtml += `<div class="po-supplier-group">
+        <div class="po-supplier-name">${sup}</div>
+        ${bySupplier[sup].map(item => `
+          <div class="po-item">
+            <span class="po-item-name">${item.product}</span>
+            <span class="po-item-qty">${item.qty} ${item.unit}</span>
+          </div>
+        `).join('')}
+      </div>`;
+    });
+
+    return `<div class="po-card">
+      <div class="po-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+        <div>
+          <h4>Order — ${dateStr}</h4>
+          <span class="po-date">${itemCount} items</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="po-status-badge ${po.status.toLowerCase()}">${po.status}</span>
+          <select onclick="event.stopPropagation()" onchange="updatePOStatus('${po.id}',this.value)" style="padding:4px 8px;border-radius:var(--r);font-size:12px">
+            <option ${po.status==='Pending'?'selected':''}>Pending</option>
+            <option ${po.status==='Received'?'selected':''}>Received</option>
+          </select>
+          <button onclick="event.stopPropagation();copyPOText('${po.id}')" style="font-size:11px;padding:4px 10px;border-radius:var(--r);color:var(--ocean)">Copy</button>
+          <button onclick="event.stopPropagation();deletePO('${po.id}')" style="font-size:14px;color:var(--danger);padding:2px 6px">&times;</button>
+        </div>
+      </div>
+      <div style="display:none">${supplierHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function updatePOStatus(id, status) {
+  const po = S.purchaseOrders.find(o => o.id === id);
+  if (po) { po.status = status; save(); renderPurchaseOrders(); }
+}
+
+function deletePO(id) {
+  if (!confirm('Delete this order?')) return;
+  S.purchaseOrders = S.purchaseOrders.filter(o => o.id !== id);
+  save();
+  renderPurchaseOrders();
+}
+
+function copyPOText(id) {
+  const po = S.purchaseOrders.find(o => o.id === id);
+  if (!po) return;
+  const d = new Date(po.date);
+  let text = 'CHE BAR ARUBA — ORDER\n' + d.toLocaleDateString() + '\n' + '='.repeat(40) + '\n';
+  const bySupplier = {};
+  po.items.forEach(item => {
+    const sup = item.supplier || 'No Supplier';
+    if (!bySupplier[sup]) bySupplier[sup] = [];
+    bySupplier[sup].push(item);
+  });
+  Object.keys(bySupplier).sort().forEach(sup => {
+    text += '\n' + sup.toUpperCase() + '\n' + '-'.repeat(30) + '\n';
+    bySupplier[sup].forEach(item => { text += `  ${item.product}: ${item.qty} ${item.unit}\n`; });
+  });
+  navigator.clipboard.writeText(text).then(() => alert('Order copied to clipboard!'));
 }
 
 /* ═══════════════════════════════════════════════════
