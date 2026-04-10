@@ -190,8 +190,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 .status-badge.pending{background:#FFF3E0;color:#E65100}
 .status-badge.ordered{background:#E3F2FD;color:#1565C0}
 .status-badge.received{background:#E8F5E9;color:#2E7D32}
-.order-qty-input{width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;text-align:center;background:var(--card)}
-.order-qty-input:focus{border-color:var(--ocean);outline:none;box-shadow:0 0 0 2px rgba(0,119,182,.15)}
+.stock-input{width:60px;padding:6px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;text-align:center;background:var(--card)}
+.stock-input:focus{border-color:var(--ocean);outline:none;box-shadow:0 0 0 2px rgba(0,119,182,.15)}
+.stock-input.order-col{border-color:var(--ocean);background:#F0F7FF;font-weight:600}
 .order-summary{max-height:60vh;overflow-y:auto}
 .order-summary h4{margin:16px 0 8px;color:var(--ocean);border-bottom:1px solid var(--border);padding-bottom:4px}
 .order-summary table{width:100%;border-collapse:collapse;margin-bottom:12px}
@@ -450,11 +451,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
   <!-- ──────── ORDERS TAB ──────── -->
   <section id="tab-orders" class="tab-content">
     <div class="tab-header">
-      <h2>Orders &amp; Inventory</h2>
+      <h2>Stock List</h2>
     </div>
     <div class="toolbar">
-      <button class="primary-btn" onclick="openOrderModal()">+ New Item</button>
       <button class="primary-btn" style="background:var(--ocean)" onclick="generateOrder()">&#128230; Generate Order</button>
+      <button class="primary-btn" onclick="openOrderModal()">+ Add Item</button>
       <select id="order-cat-filter" onchange="renderOrders()" style="padding:8px 12px;border-radius:var(--r)">
         <option value="all">All Categories</option>
         <option value="Produce">Produce</option>
@@ -470,21 +471,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)}
         <option value="Beer">Beer</option>
         <option value="Frozen">Frozen</option>
       </select>
-      <select id="order-filter" onchange="renderOrders()" style="padding:8px 12px;border-radius:var(--r)">
-        <option value="all">All Status</option>
-        <option value="Pending">Pending</option>
-        <option value="Ordered">Ordered</option>
-        <option value="Received">Received</option>
-      </select>
-      <input type="text" id="order-search" placeholder="Search products..." oninput="renderOrders()" style="padding:8px 12px;border-radius:var(--r);width:200px">
+      <input type="text" id="order-search" placeholder="Search..." oninput="renderOrders()" style="padding:8px 12px;border-radius:var(--r);width:160px">
     </div>
     <table class="orders-table">
       <thead><tr>
-        <th>Product</th><th>In Stock</th><th>Unit</th><th>Order Qty</th><th>Supplier</th><th>Status</th><th></th>
+        <th>Product</th><th>Par Stock</th><th>Current</th><th>Order Qty</th>
       </tr></thead>
       <tbody id="orders-body"></tbody>
     </table>
-    <p id="orders-empty" style="text-align:center;padding:40px;color:var(--text3);display:none">No orders yet. Click "+ New Order" to add one.</p>
   </section>
 
   <!-- ──────── TASKS TAB ──────── -->
@@ -598,6 +592,7 @@ let S = {
   employees: [],
   schedule: {},
   orders: [],
+  stock: {},
   tasks: [],
   sales2025: {},
   sales2026: {},
@@ -1011,101 +1006,294 @@ function renderSundayRule() {
 }
 
 /* ═══════════════════════════════════════════════════
-   TO-DO: ORDERS
+   STOCK LIST
    ═══════════════════════════════════════════════════ */
 const ORDER_CATS = ['Produce','Proteins','Dairy & Cheese','Bread & Dough','Sauces & Condiments','Dry Goods & Pantry','Coffee & Tea','Juices & Mixers','Spirits & Liqueurs','Wine','Beer','Frozen'];
 
-function openOrderModal(editId) {
-  const o = editId ? S.orders.find(x => x.id === editId) : null;
+// Master stock list — extracted from the Che Bar menu
+const STOCK_MASTER = [
+  // ── Produce ──
+  {product:'Avocado',category:'Produce',unit:'each'},
+  {product:'Tomatoes',category:'Produce',unit:'lbs'},
+  {product:'Red Onion',category:'Produce',unit:'lbs'},
+  {product:'White Onion',category:'Produce',unit:'lbs'},
+  {product:'Lettuce (Mixed Greens)',category:'Produce',unit:'lbs'},
+  {product:'Arugula',category:'Produce',unit:'lbs'},
+  {product:'Spinach',category:'Produce',unit:'lbs'},
+  {product:'Cucumber',category:'Produce',unit:'each'},
+  {product:'Bell Peppers',category:'Produce',unit:'lbs'},
+  {product:'Jalapeños',category:'Produce',unit:'lbs'},
+  {product:'Cilantro',category:'Produce',unit:'bunches'},
+  {product:'Basil (Fresh)',category:'Produce',unit:'bunches'},
+  {product:'Mint (Fresh)',category:'Produce',unit:'bunches'},
+  {product:'Garlic',category:'Produce',unit:'lbs'},
+  {product:'Ginger (Fresh)',category:'Produce',unit:'lbs'},
+  {product:'Limes',category:'Produce',unit:'each'},
+  {product:'Lemons',category:'Produce',unit:'each'},
+  {product:'Bananas',category:'Produce',unit:'each'},
+  {product:'Berries (Mixed)',category:'Produce',unit:'packs'},
+  {product:'Mushrooms',category:'Produce',unit:'lbs'},
+  {product:'Potatoes',category:'Produce',unit:'lbs'},
+  {product:'Sweet Potatoes',category:'Produce',unit:'lbs'},
+  {product:'Corn on the Cob',category:'Produce',unit:'each'},
+  {product:'Scallions',category:'Produce',unit:'bunches'},
+  {product:'Cabbage',category:'Produce',unit:'each'},
+  {product:'Carrots',category:'Produce',unit:'lbs'},
+  {product:'Beets',category:'Produce',unit:'lbs'},
+  {product:'Pineapple',category:'Produce',unit:'each'},
+  {product:'Mango',category:'Produce',unit:'each'},
+  {product:'Watermelon',category:'Produce',unit:'each'},
+  {product:'Oranges',category:'Produce',unit:'each'},
+  {product:'Passion Fruit',category:'Produce',unit:'each'},
+  // ── Proteins ──
+  {product:'Chicken Breast',category:'Proteins',unit:'lbs'},
+  {product:'Chicken Thighs',category:'Proteins',unit:'lbs'},
+  {product:'Ground Beef',category:'Proteins',unit:'lbs'},
+  {product:'Beef Steak (Ribeye)',category:'Proteins',unit:'lbs'},
+  {product:'Pork Belly',category:'Proteins',unit:'lbs'},
+  {product:'Pork Chops',category:'Proteins',unit:'lbs'},
+  {product:'Bacon',category:'Proteins',unit:'lbs'},
+  {product:'Chorizo',category:'Proteins',unit:'lbs'},
+  {product:'Shrimp',category:'Proteins',unit:'lbs'},
+  {product:'White Fish (Mahi / Snapper)',category:'Proteins',unit:'lbs'},
+  {product:'Salmon',category:'Proteins',unit:'lbs'},
+  {product:'Tuna (Sushi Grade)',category:'Proteins',unit:'lbs'},
+  {product:'Octopus',category:'Proteins',unit:'lbs'},
+  {product:'Calamari',category:'Proteins',unit:'lbs'},
+  {product:'Eggs',category:'Proteins',unit:'cases'},
+  {product:'Smoked Salmon',category:'Proteins',unit:'lbs'},
+  {product:'Prosciutto',category:'Proteins',unit:'lbs'},
+  // ── Dairy & Cheese ──
+  {product:'Butter (Unsalted)',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Cream Cheese',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Heavy Cream',category:'Dairy & Cheese',unit:'gallons'},
+  {product:'Whole Milk',category:'Dairy & Cheese',unit:'gallons'},
+  {product:'Oat Milk',category:'Dairy & Cheese',unit:'cases'},
+  {product:'Almond Milk',category:'Dairy & Cheese',unit:'cases'},
+  {product:'Coconut Milk',category:'Dairy & Cheese',unit:'cases'},
+  {product:'Sour Cream',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Yogurt (Greek)',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Parmesan (Parmigiano)',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Mozzarella (Fresh)',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Cheddar',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Gouda',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Feta',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Goat Cheese',category:'Dairy & Cheese',unit:'lbs'},
+  {product:'Blue Cheese',category:'Dairy & Cheese',unit:'lbs'},
+  // ── Bread & Dough ──
+  {product:'Burger Buns (Brioche)',category:'Bread & Dough',unit:'packs'},
+  {product:'Sourdough Bread',category:'Bread & Dough',unit:'loaves'},
+  {product:'Ciabatta Rolls',category:'Bread & Dough',unit:'packs'},
+  {product:'Tortillas (Flour)',category:'Bread & Dough',unit:'packs'},
+  {product:'Tortillas (Corn)',category:'Bread & Dough',unit:'packs'},
+  {product:'Pita Bread',category:'Bread & Dough',unit:'packs'},
+  {product:'Croissants',category:'Bread & Dough',unit:'each'},
+  {product:'Pizza Dough',category:'Bread & Dough',unit:'each'},
+  {product:'Flatbread / Naan',category:'Bread & Dough',unit:'packs'},
+  // ── Sauces & Condiments ──
+  {product:'Olive Oil (Extra Virgin)',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Vegetable Oil',category:'Sauces & Condiments',unit:'gallons'},
+  {product:'Soy Sauce',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Sriracha',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Hot Sauce',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Mayo',category:'Sauces & Condiments',unit:'jars'},
+  {product:'Ketchup',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Mustard (Dijon)',category:'Sauces & Condiments',unit:'jars'},
+  {product:'Mustard (Yellow)',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'BBQ Sauce',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Worcestershire Sauce',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Balsamic Vinegar',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Red Wine Vinegar',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Fish Sauce',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Tahini',category:'Sauces & Condiments',unit:'jars'},
+  {product:'Pesto',category:'Sauces & Condiments',unit:'jars'},
+  {product:'Chimichurri',category:'Sauces & Condiments',unit:'jars'},
+  {product:'Honey',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Maple Syrup',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Truffle Oil',category:'Sauces & Condiments',unit:'bottles'},
+  {product:'Coconut Aminos',category:'Sauces & Condiments',unit:'bottles'},
+  // ── Dry Goods & Pantry ──
+  {product:'Rice (White / Jasmine)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Pasta (Spaghetti)',category:'Dry Goods & Pantry',unit:'boxes'},
+  {product:'Pasta (Penne)',category:'Dry Goods & Pantry',unit:'boxes'},
+  {product:'Quinoa',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Black Beans (Canned)',category:'Dry Goods & Pantry',unit:'cans'},
+  {product:'Chickpeas (Canned)',category:'Dry Goods & Pantry',unit:'cans'},
+  {product:'Lentils',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Canned Tomatoes (Whole)',category:'Dry Goods & Pantry',unit:'cans'},
+  {product:'Tomato Paste',category:'Dry Goods & Pantry',unit:'cans'},
+  {product:'Coconut Cream',category:'Dry Goods & Pantry',unit:'cans'},
+  {product:'Flour (All-Purpose)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Sugar (White)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Sugar (Brown)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Salt (Kosher)',category:'Dry Goods & Pantry',unit:'boxes'},
+  {product:'Salt (Flaky / Maldon)',category:'Dry Goods & Pantry',unit:'boxes'},
+  {product:'Black Pepper (Whole)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Cumin',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Paprika (Smoked)',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Chili Flakes',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Oregano (Dried)',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Cinnamon',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Turmeric',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Nutmeg',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Vanilla Extract',category:'Dry Goods & Pantry',unit:'bottles'},
+  {product:'Baking Powder',category:'Dry Goods & Pantry',unit:'cans'},
+  {product:'Panko Breadcrumbs',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Nuts (Almonds)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Nuts (Cashews)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Nuts (Walnuts)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Seeds (Sesame)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Seeds (Chia)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Granola',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Oats (Rolled)',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Tortilla Chips',category:'Dry Goods & Pantry',unit:'bags'},
+  {product:'Capers',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Olives (Kalamata)',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Sun-Dried Tomatoes',category:'Dry Goods & Pantry',unit:'jars'},
+  {product:'Chocolate (Dark)',category:'Dry Goods & Pantry',unit:'bars'},
+  {product:'Cocoa Powder',category:'Dry Goods & Pantry',unit:'bags'},
+  // ── Coffee & Tea ──
+  {product:'Espresso Beans',category:'Coffee & Tea',unit:'bags'},
+  {product:'Decaf Espresso Beans',category:'Coffee & Tea',unit:'bags'},
+  {product:'Matcha Powder',category:'Coffee & Tea',unit:'bags'},
+  {product:'Chai Concentrate',category:'Coffee & Tea',unit:'bottles'},
+  {product:'Tea — English Breakfast',category:'Coffee & Tea',unit:'boxes'},
+  {product:'Tea — Green',category:'Coffee & Tea',unit:'boxes'},
+  {product:'Tea — Chamomile',category:'Coffee & Tea',unit:'boxes'},
+  {product:'Tea — Mint',category:'Coffee & Tea',unit:'boxes'},
+  // ── Juices & Mixers ──
+  {product:'Orange Juice (Fresh)',category:'Juices & Mixers',unit:'gallons'},
+  {product:'Pineapple Juice',category:'Juices & Mixers',unit:'bottles'},
+  {product:'Cranberry Juice',category:'Juices & Mixers',unit:'bottles'},
+  {product:'Grapefruit Juice',category:'Juices & Mixers',unit:'bottles'},
+  {product:'Lime Juice (Fresh)',category:'Juices & Mixers',unit:'bottles'},
+  {product:'Lemon Juice (Fresh)',category:'Juices & Mixers',unit:'bottles'},
+  {product:'Coconut Water',category:'Juices & Mixers',unit:'cases'},
+  {product:'Tonic Water',category:'Juices & Mixers',unit:'cases'},
+  {product:'Soda Water / Club Soda',category:'Juices & Mixers',unit:'cases'},
+  {product:'Ginger Beer',category:'Juices & Mixers',unit:'cases'},
+  {product:'Cola',category:'Juices & Mixers',unit:'cases'},
+  {product:'Sprite / 7UP',category:'Juices & Mixers',unit:'cases'},
+  {product:'Simple Syrup',category:'Juices & Mixers',unit:'bottles'},
+  {product:'Grenadine',category:'Juices & Mixers',unit:'bottles'},
+  {product:'Angostura Bitters',category:'Juices & Mixers',unit:'bottles'},
+  // ── Spirits & Liqueurs ──
+  {product:'Vodka',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'White Rum',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Dark Rum',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Tequila Blanco',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Tequila Reposado',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Mezcal',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Gin',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Bourbon / Whiskey',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Scotch',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Aperol',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Campari',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Kahlúa',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Baileys',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Triple Sec / Cointreau',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Amaretto',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Coconut Liqueur (Malibu)',category:'Spirits & Liqueurs',unit:'bottles'},
+  {product:'Prosecco',category:'Spirits & Liqueurs',unit:'bottles'},
+  // ── Wine ──
+  {product:'House White Wine',category:'Wine',unit:'bottles'},
+  {product:'House Red Wine',category:'Wine',unit:'bottles'},
+  {product:'Rosé',category:'Wine',unit:'bottles'},
+  {product:'Sauvignon Blanc',category:'Wine',unit:'bottles'},
+  {product:'Chardonnay',category:'Wine',unit:'bottles'},
+  {product:'Pinot Grigio',category:'Wine',unit:'bottles'},
+  {product:'Malbec',category:'Wine',unit:'bottles'},
+  {product:'Cabernet Sauvignon',category:'Wine',unit:'bottles'},
+  {product:'Pinot Noir',category:'Wine',unit:'bottles'},
+  // ── Beer ──
+  {product:'Balashi (Local)',category:'Beer',unit:'cases'},
+  {product:'Chill (Local)',category:'Beer',unit:'cases'},
+  {product:'Corona',category:'Beer',unit:'cases'},
+  {product:'Heineken',category:'Beer',unit:'cases'},
+  {product:'Amstel Bright',category:'Beer',unit:'cases'},
+  {product:'IPA (Craft)',category:'Beer',unit:'cases'},
+  {product:'Non-Alcoholic Beer',category:'Beer',unit:'cases'},
+  // ── Frozen ──
+  {product:'French Fries',category:'Frozen',unit:'bags'},
+  {product:'Sweet Potato Fries',category:'Frozen',unit:'bags'},
+  {product:'Ice Cream (Vanilla)',category:'Frozen',unit:'tubs'},
+  {product:'Ice Cream (Chocolate)',category:'Frozen',unit:'tubs'},
+  {product:'Sorbet (Mango)',category:'Frozen',unit:'tubs'},
+  {product:'Frozen Fruit Mix (Smoothies)',category:'Frozen',unit:'bags'},
+  {product:'Frozen Puff Pastry',category:'Frozen',unit:'packs'},
+  {product:'Ice (Bags)',category:'Frozen',unit:'bags'},
+];
+
+// Initialize stock from master list — merge with any saved data
+function initStock() {
+  if (!S.stock) S.stock = {};
+  STOCK_MASTER.forEach(item => {
+    const key = item.product;
+    if (!S.stock[key]) {
+      S.stock[key] = { par: 0, current: 0, orderQty: 0, unit: item.unit, category: item.category };
+    }
+  });
+  // Also keep any custom items the user added
+}
+
+function openOrderModal(editKey) {
+  const isEdit = editKey && S.stock[editKey];
+  const o = isEdit ? { product: editKey, ...S.stock[editKey] } : null;
   $('modal').innerHTML = `
-    <h3>${o ? 'Edit' : 'New'} Stock Item</h3>
-    <div class="form-group"><label>Product Name</label><input id="o-product" value="${o?o.product:''}"></div>
+    <h3>${o ? 'Edit' : 'Add'} Stock Item</h3>
+    <div class="form-group"><label>Product Name</label><input id="o-product" value="${o?o.product:''}" ${isEdit?'disabled':''}></div>
     <div class="form-group"><label>Category</label><select id="o-cat">
       ${ORDER_CATS.map(c => `<option ${o&&o.category===c?'selected':''}>${c}</option>`).join('')}
     </select></div>
-    <div class="form-group" style="display:flex;gap:10px">
-      <div style="flex:1"><label>Quantity</label><input id="o-qty" type="number" value="${o?o.qty:''}"></div>
-      <div style="flex:1"><label>Unit</label><select id="o-unit">
-        ${['lbs','cases','each','bottles','bags','boxes','gallons','kg','packs'].map(u => `<option ${o&&o.unit===u?'selected':''}>${u}</option>`).join('')}
-      </select></div>
-    </div>
-    <div class="form-group"><label>Supplier</label><input id="o-supplier" value="${o?o.supplier:''}"></div>
-    <div class="form-group"><label>Backup Supplier</label><input id="o-backup" value="${o?o.backup:''}"></div>
-    <div class="form-group"><label>Status</label><select id="o-status">
-      ${['Pending','Ordered','Received'].map(s => `<option ${o&&o.status===s?'selected':''}>${s}</option>`).join('')}
+    <div class="form-group"><label>Unit</label><select id="o-unit">
+      ${['lbs','cases','each','bottles','bags','boxes','gallons','kg','packs','bunches','loaves','jars','cans','bars','tubs'].map(u => `<option ${o&&o.unit===u?'selected':''}>${u}</option>`).join('')}
     </select></div>
     <div class="modal-actions">
       <button class="cancel-btn" onclick="closeModal()">Cancel</button>
-      <button class="save-btn" onclick="saveOrder('${editId||''}')">${o?'Update':'Add'}</button>
+      <button class="save-btn" onclick="saveOrder('${isEdit?editKey:''}')">${o?'Update':'Add'}</button>
     </div>`;
   openModal();
 }
 
-function saveOrder(editId) {
-  const data = {
-    id: editId || uid(),
-    product: $('o-product').value.trim(),
-    category: $('o-cat').value,
-    qty: $('o-qty').value,
-    unit: $('o-unit').value,
-    supplier: $('o-supplier').value.trim(),
-    backup: $('o-backup').value.trim(),
-    status: $('o-status').value
-  };
-  if (!data.product) { alert('Enter a product name'); return; }
-  if (editId) {
-    const i = S.orders.findIndex(x => x.id === editId);
-    if (i >= 0) S.orders[i] = data;
-  } else {
-    S.orders.push(data);
-  }
+function saveOrder(editKey) {
+  const name = editKey || $('o-product').value.trim();
+  if (!name) { alert('Enter a product name'); return; }
+  if (!S.stock[name]) S.stock[name] = { par: 0, current: 0, orderQty: 0 };
+  S.stock[name].category = $('o-cat').value;
+  S.stock[name].unit = $('o-unit').value;
   save();
   $('modal').innerHTML = '';
   closeModal();
   renderOrders();
-  setTimeout(renderOrders, 300);
 }
 
-function deleteOrder(id) {
-  S.orders = S.orders.filter(x => x.id !== id);
+function updateStockField(product, field, val) {
+  if (!S.stock[product]) return;
+  S.stock[product][field] = val ? Number(val) : 0;
   save();
-  renderOrders();
-}
-
-function cycleOrderStatus(id) {
-  const o = S.orders.find(x => x.id === id);
-  if (!o) return;
-  const cycle = ['Pending','Ordered','Received'];
-  o.status = cycle[(cycle.indexOf(o.status) + 1) % 3];
-  save();
-  renderOrders();
 }
 
 function renderOrders() {
-  const filter = $('order-filter').value;
+  initStock();
   const catFilter = $('order-cat-filter').value;
   const search = $('order-search').value.toLowerCase();
-  let items = [...S.orders];
-  if (filter !== 'all') items = items.filter(o => o.status === filter);
+
+  // Build sorted list from STOCK_MASTER + any custom items
+  const masterNames = new Set(STOCK_MASTER.map(i => i.product));
+  let items = STOCK_MASTER.map(i => ({ product: i.product, ...S.stock[i.product] }));
+  // Add custom items
+  Object.keys(S.stock).forEach(key => {
+    if (!masterNames.has(key)) items.push({ product: key, ...S.stock[key] });
+  });
+
   if (catFilter !== 'all') items = items.filter(o => o.category === catFilter);
-  if (search) items = items.filter(o => o.product.toLowerCase().includes(search) || (o.supplier||'').toLowerCase().includes(search));
+  if (search) items = items.filter(o => o.product.toLowerCase().includes(search));
 
-  if (!items.length) {
-    $('orders-body').innerHTML = '';
-    document.querySelector('.orders-table').style.display = 'none';
-    $('orders-empty').style.display = 'block';
-    $('orders-empty').textContent = S.orders.length ? 'No items match your filters.' : 'No items yet. Click "+ New Item" to add one.';
-    return;
-  }
-  document.querySelector('.orders-table').style.display = '';
-  $('orders-empty').style.display = 'none';
-
-  // Group by category
-  const catOrder = ['Produce','Proteins','Dairy & Cheese','Bread & Dough','Sauces & Condiments','Dry Goods & Pantry','Coffee & Tea','Juices & Mixers','Spirits & Liqueurs','Wine','Beer','Frozen',''];
+  const catOrder = ORDER_CATS.concat(['']);
   items.sort((a, b) => {
     const ca = catOrder.indexOf(a.category || ''), cb = catOrder.indexOf(b.category || '');
     if (ca !== cb) return ca - cb;
-    return (a.product || '').localeCompare(b.product || '');
+    return a.product.localeCompare(b.product);
   });
 
   let html = '';
@@ -1113,55 +1301,50 @@ function renderOrders() {
   items.forEach(o => {
     const cat = o.category || 'Uncategorized';
     if (cat !== lastCat) {
-      html += `<tr class="cat-header"><td colspan="7"><span>${cat}</span></td></tr>`;
+      html += `<tr class="cat-header"><td colspan="4"><span>${cat}</span></td></tr>`;
       lastCat = cat;
     }
-    const oq = o.orderQty || '';
-    html += `<tr>
-      <td><strong>${o.product}</strong></td>
-      <td>${o.qty}</td>
-      <td>${o.unit}</td>
-      <td><input type="number" min="0" class="order-qty-input" data-id="${o.id}" value="${oq}" placeholder="0" oninput="updateOrderQty('${o.id}',this.value)"></td>
-      <td>${o.supplier}</td>
-      <td><span class="status-badge ${o.status.toLowerCase()}" style="cursor:pointer" onclick="cycleOrderStatus('${o.id}')">${o.status}</span></td>
-      <td class="row-actions">
-        <button onclick="openOrderModal('${o.id}')" style="color:var(--foh)">Edit</button>
-        <button class="del-btn" onclick="deleteOrder('${o.id}')">Del</button>
-      </td>
+    const lowClass = (o.current > 0 && o.par > 0 && o.current < o.par) ? ' style="background:#FFF3E0"' : '';
+    const emptyClass = (o.par > 0 && o.current === 0) ? ' style="background:#FFEBEE"' : '';
+    const rowStyle = emptyClass || lowClass;
+    html += `<tr${rowStyle}>
+      <td><strong>${o.product}</strong><span style="display:block;font-size:11px;color:var(--text3)">${o.unit}</span></td>
+      <td><input type="number" min="0" class="stock-input" value="${o.par||''}" placeholder="—" onchange="updateStockField('${o.product.replace(/'/g,"\\'")}','par',this.value)"></td>
+      <td><input type="number" min="0" class="stock-input" value="${o.current||''}" placeholder="—" onchange="updateStockField('${o.product.replace(/'/g,"\\'")}','current',this.value)"></td>
+      <td><input type="number" min="0" class="stock-input order-col" value="${o.orderQty||''}" placeholder="0" onchange="updateStockField('${o.product.replace(/'/g,"\\'")}','orderQty',this.value)"></td>
     </tr>`;
   });
   $('orders-body').innerHTML = html;
 }
 
-function updateOrderQty(id, val) {
-  const o = S.orders.find(x => x.id === id);
-  if (!o) return;
-  o.orderQty = val ? Number(val) : 0;
-  save();
-}
-
 function generateOrder() {
-  const items = S.orders.filter(o => o.orderQty && o.orderQty > 0);
+  initStock();
+  const items = [];
+  Object.keys(S.stock).forEach(key => {
+    const s = S.stock[key];
+    if (s.orderQty && s.orderQty > 0) items.push({ product: key, ...s });
+  });
   if (!items.length) {
-    alert('Enter order quantities for the items you want to order first.');
+    alert('Enter order quantities in the "Order Qty" column first.');
     return;
   }
-  // Group by supplier
-  const bySupplier = {};
+  // Group by category
+  const byCat = {};
   items.forEach(o => {
-    const sup = o.supplier || 'No Supplier';
-    if (!bySupplier[sup]) bySupplier[sup] = [];
-    bySupplier[sup].push(o);
+    const cat = o.category || 'Other';
+    if (!byCat[cat]) byCat[cat] = [];
+    byCat[cat].push(o);
   });
 
   let html = '<h3>&#128230; Order Summary</h3><div class="order-summary">';
-  let textOrder = 'ORDER — ' + new Date().toLocaleDateString() + '\n';
+  let textOrder = 'CHE BAR ARUBA — ORDER\n' + new Date().toLocaleDateString() + '\n';
   textOrder += '='.repeat(40) + '\n';
 
-  Object.keys(bySupplier).sort().forEach(sup => {
-    html += `<h4>${sup}</h4><table><tr><th>Product</th><th>Qty</th><th>Unit</th></tr>`;
-    textOrder += '\n' + sup.toUpperCase() + '\n' + '-'.repeat(30) + '\n';
-    bySupplier[sup].forEach(o => {
+  ORDER_CATS.forEach(cat => {
+    if (!byCat[cat]) return;
+    html += `<h4>${cat}</h4><table><tr><th>Product</th><th>Qty</th><th>Unit</th></tr>`;
+    textOrder += '\n' + cat.toUpperCase() + '\n' + '-'.repeat(30) + '\n';
+    byCat[cat].sort((a,b) => a.product.localeCompare(b.product)).forEach(o => {
       html += `<tr><td>${o.product}</td><td><strong>${o.orderQty}</strong></td><td>${o.unit}</td></tr>`;
       textOrder += `  ${o.product}: ${o.orderQty} ${o.unit}\n`;
     });
@@ -1172,10 +1355,9 @@ function generateOrder() {
   html += `<div class="modal-actions" style="margin-top:16px">
     <button class="cancel-btn" onclick="closeModal()">Close</button>
     <button class="save-btn" style="background:var(--sage)" onclick="copyOrderText()">&#128203; Copy as Text</button>
-    <button class="save-btn" onclick="confirmOrder()">&#10003; Confirm &amp; Clear Quantities</button>
+    <button class="save-btn" onclick="confirmOrder()">&#10003; Confirm &amp; Clear</button>
   </div>`;
 
-  // Store text for copy
   window._orderText = textOrder;
   $('modal').innerHTML = html;
   openModal();
@@ -1188,11 +1370,8 @@ function copyOrderText() {
 }
 
 function confirmOrder() {
-  S.orders.forEach(o => {
-    if (o.orderQty && o.orderQty > 0) {
-      o.status = 'Ordered';
-      o.orderQty = 0;
-    }
+  Object.keys(S.stock).forEach(key => {
+    if (S.stock[key].orderQty > 0) S.stock[key].orderQty = 0;
   });
   save();
   $('modal').innerHTML = '';
