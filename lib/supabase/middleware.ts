@@ -33,6 +33,20 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Enforce email allowlist
+  if (user && url.pathname.startsWith('/dashboard')) {
+    const allowed = process.env.ALLOWED_EMAILS;
+    if (allowed) {
+      const allowedList = allowed.split(',').map((e) => e.trim().toLowerCase());
+      if (!allowedList.includes(user.email?.toLowerCase() ?? '')) {
+        await supabase.auth.signOut();
+        url.pathname = '/login';
+        url.searchParams.set('error', 'not_allowed');
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
   // If user already signed in, redirect /login to /dashboard
   if (user && url.pathname === '/login') {
     url.pathname = '/dashboard';

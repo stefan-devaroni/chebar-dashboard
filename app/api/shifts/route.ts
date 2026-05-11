@@ -1,0 +1,59 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+
+export async function GET(request: NextRequest) {
+  const supabase = createClient();
+  const weekStart = request.nextUrl.searchParams.get('weekStart');
+
+  let query = supabase
+    .from('shifts')
+    .select('*, team_members(id, name, color)')
+    .order('start_time');
+
+  if (weekStart) {
+    const start = new Date(weekStart);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    query = query
+      .gte('date', start.toISOString().split('T')[0])
+      .lte('date', end.toISOString().split('T')[0]);
+  }
+
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function POST(request: NextRequest) {
+  const supabase = createClient();
+  const body = await request.json();
+
+  const { data, error } = await supabase
+    .from('shifts')
+    .insert({
+      team_member_id: body.team_member_id,
+      date: body.date,
+      start_time: body.start_time,
+      end_time: body.end_time,
+      shift_type: body.shift_type || 'morning',
+      notes: body.notes || null,
+    })
+    .select('*, team_members(id, name, color)')
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
+export async function DELETE(request: NextRequest) {
+  const supabase = createClient();
+  const { id } = await request.json();
+
+  const { error } = await supabase
+    .from('shifts')
+    .delete()
+    .eq('id', id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ status: 'deleted' });
+}
