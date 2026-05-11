@@ -13,7 +13,7 @@ const config: Config = {
         gold: "#d4a45c",
       },
       fontFamily: {
-        display: ['"Italiana"', 'serif'],
+        display: ['"Playfair Display"', 'serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
     },
