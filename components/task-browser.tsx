@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import { Check, Circle, AlertCircle, Loader2, Plus, X } from 'lucide-react';
+import { Check, Circle, AlertCircle, Loader2, Plus, X, MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked';
@@ -39,6 +39,29 @@ export function TaskBrowser({ initialData }: { initialData: Category[] }) {
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [showNewTask, setShowNewTask] = useState(false);
   const [editingDueDate, setEditingDueDate] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+
+  async function updateNote(taskId: string, notes: string | null) {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ notes: notes || null })
+      .eq('id', taskId);
+
+    if (!error) {
+      setData((prev) =>
+        prev.map((cat) => ({
+          ...cat,
+          subcategories: cat.subcategories.map((sub) => ({
+            ...sub,
+            tasks: sub.tasks.map((t) =>
+              t.id === taskId ? { ...t, notes: notes || null } : t
+            ),
+          })),
+        }))
+      );
+    }
+    setEditingNote(null);
+  }
 
   async function updateStatus(taskId: string, newStatus: TaskStatus) {
     setPending((prev) => new Set(prev).add(taskId));
@@ -256,6 +279,35 @@ export function TaskBrowser({ initialData }: { initialData: Category[] }) {
                             </button>
                           )}
                         </div>
+                        {editingNote === task.id ? (
+                          <textarea
+                            defaultValue={task.notes ?? ''}
+                            autoFocus
+                            rows={2}
+                            placeholder="Add a note..."
+                            onBlur={(e) => updateNote(task.id, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setEditingNote(null);
+                            }}
+                            className="mt-2 w-full bg-cream border border-neutral-200 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-gold resize-y"
+                          />
+                        ) : task.notes ? (
+                          <button
+                            onClick={() => setEditingNote(task.id)}
+                            className="mt-2 text-xs text-neutral-500 hover:text-ink transition text-left"
+                          >
+                            <MessageSquare size={12} className="inline mr-1 -mt-0.5" strokeWidth={1.5} />
+                            {task.notes}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setEditingNote(task.id)}
+                            className="mt-1.5 text-xs text-neutral-400 opacity-0 group-hover:opacity-100 hover:text-ink transition"
+                          >
+                            <MessageSquare size={12} className="inline mr-1 -mt-0.5" strokeWidth={1.5} />
+                            + note
+                          </button>
+                        )}
                       </div>
                     </li>
                   ))}
