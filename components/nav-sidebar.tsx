@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, ListChecks, LineChart, Music, FileBarChart, MessageSquare, Users, CalendarDays, LogOut } from 'lucide-react';
+import { LayoutDashboard, ListChecks, LineChart, Music, FileBarChart, MessageSquare, Users, CalendarDays, ShoppingCart, LogOut } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/dashboard/team', label: 'Team', icon: Users },
+  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart },
   { href: '/dashboard/metrics', label: 'Metrics', icon: LineChart },
   { href: '/dashboard/music', label: 'Music ROI', icon: Music },
   { href: '/dashboard/reports', label: 'Reports', icon: FileBarChart },
