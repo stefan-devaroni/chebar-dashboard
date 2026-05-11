@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, XCircle, AlertTriangle, SkipForward, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, SkipForward, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
 interface Ingestion {
   id: string;
@@ -25,7 +26,19 @@ const statusConfig: Record<string, { icon: typeof CheckCircle2; color: string; l
 };
 
 export function IngestionLog({ ingestions }: { ingestions: Ingestion[] }) {
+  const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  async function handleDelete(id: string) {
+    if (!confirm('Delete this report? Any daily metrics it imported will also be removed.')) return;
+    setDeleting(id);
+    const res = await fetch(`/api/reports/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      router.refresh();
+    }
+    setDeleting(null);
+  }
 
   if (ingestions.length === 0) {
     return (
@@ -105,6 +118,14 @@ export function IngestionLog({ ingestions }: { ingestions: Ingestion[] }) {
                     {ing.ai_summary}
                   </div>
                 )}
+                <button
+                  onClick={() => handleDelete(ing.id)}
+                  disabled={deleting === ing.id}
+                  className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 transition mt-2 disabled:opacity-50"
+                >
+                  <Trash2 size={12} strokeWidth={1.5} />
+                  {deleting === ing.id ? 'Deleting...' : 'Delete report'}
+                </button>
               </div>
             )}
           </div>

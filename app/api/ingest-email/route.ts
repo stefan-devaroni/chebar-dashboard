@@ -178,7 +178,7 @@ async function parsePdfWithClaude(
   attachment: File,
   from: string,
   subject: string,
-  supabase: ReturnType<typeof createClient>
+  supabase: any
 ) {
   const fileName = attachment.name ?? 'report.pdf';
   const bytes = await attachment.arrayBuffer();
