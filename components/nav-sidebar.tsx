@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, ListChecks, LineChart, Music, FileBarChart, MessageSquare, Users, CalendarDays, ShoppingCart, LogOut } from 'lucide-react';
+import { LayoutDashboard, ListChecks, LineChart, Music, FileBarChart, Megaphone, Users, CalendarDays, ShoppingCart, LogOut } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -15,7 +15,7 @@ const navItems = [
   { href: '/dashboard/metrics', label: 'Metrics', icon: LineChart },
   { href: '/dashboard/music', label: 'Music ROI', icon: Music },
   { href: '/dashboard/reports', label: 'Reports', icon: FileBarChart },
-  { href: '/dashboard/reviews', label: 'Reviews', icon: MessageSquare },
+  { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
 ];
 
 export function NavSidebar({ userEmail }: { userEmail: string }) {
