@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Italiana&family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --cream: #f4f1ea;
+  --ink: #1a1a1a;
+  --gold: #d4a45c;
+}
+
+html,
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: 'Italiana', serif;
+  letter-spacing: 0.02em;
+}
+
+/* Subtle focus ring */
+*:focus-visible {
+  outline: 1px solid var(--gold);
+  outline-offset: 2px;
+}
