@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('shifts')
-    .select('*, team_members(id, name, color)')
+    .select('*, team_members(id, name, color, department)')
     .order('start_time');
 
   if (weekStart) {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       shift_type: body.shift_type || 'morning',
       notes: body.notes || null,
     })
-    .select('*, team_members(id, name, color)')
+    .select('*, team_members(id, name, color, department)')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

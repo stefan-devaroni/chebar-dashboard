@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     .insert({
       name: body.name,
       role: body.role || 'employee',
+      department: body.department || 'foh',
       color: body.color || '#d4a45c',
     })
     .select()
@@ -39,6 +40,7 @@ export async function PUT(request: NextRequest) {
     .update({
       name: body.name,
       role: body.role,
+      department: body.department,
       color: body.color,
       active: body.active,
     })

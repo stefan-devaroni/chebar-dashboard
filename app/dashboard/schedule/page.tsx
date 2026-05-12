@@ -20,7 +20,7 @@ export default async function SchedulePage() {
 
   const { data: shifts } = await supabase
     .from('shifts')
-    .select('*, team_members(id, name, color)')
+    .select('*, team_members(id, name, color, department)')
     .gte('date', monday.toISOString().split('T')[0])
     .lte('date', sunday.toISOString().split('T')[0])
     .order('start_time');

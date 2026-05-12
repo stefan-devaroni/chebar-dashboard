@@ -9,6 +9,7 @@ interface TeamMember {
   name: string;
   color: string;
   role: string;
+  department?: string;
 }
 
 interface Shift {
@@ -19,10 +20,15 @@ interface Shift {
   end_time: string;
   shift_type: string;
   notes: string | null;
-  team_members: { id: string; name: string; color: string };
+  team_members: { id: string; name: string; color: string; department?: string };
 }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const DEPT_COLORS: Record<string, string> = {
+  foh: '#4f8cff',
+  kitchen: '#e6884b',
+};
 
 function getMonday(dateStr: string): Date {
   const d = new Date(dateStr + 'T00:00:00');
@@ -188,34 +194,45 @@ export function WeeklySchedule({
             {/* Shift cells */}
             {weekDates.map((date) => {
               const dayShifts = shifts.filter((s) => s.date === date);
-              const morningShifts = dayShifts.filter((s) => s.shift_type === 'morning');
-              const eveningShifts = dayShifts.filter((s) => s.shift_type === 'evening');
+              const fohShifts = dayShifts.filter((s) => (s.team_members.department || 'foh') === 'foh');
+              const kitchenShifts = dayShifts.filter((s) => (s.team_members.department || 'foh') === 'kitchen');
               const isToday = date === todayStr;
+
+              const renderDeptShifts = (deptShifts: Shift[]) => {
+                const morning = deptShifts.filter((s) => s.shift_type === 'morning');
+                const evening = deptShifts.filter((s) => s.shift_type === 'evening');
+                return (
+                  <>
+                    {morning.map((s) => (
+                      <ShiftPill key={s.id} shift={s} onDelete={deleteShift} />
+                    ))}
+                    {evening.map((s) => (
+                      <ShiftPill key={s.id} shift={s} onDelete={deleteShift} />
+                    ))}
+                  </>
+                );
+              };
 
               return (
                 <div
                   key={`cell-${date}`}
                   className={cn(
-                    'bg-white p-2 min-h-[160px] flex flex-col gap-1',
+                    'bg-white p-2 min-h-[160px] flex flex-col',
                     isToday && 'bg-gold/5'
                   )}
                 >
-                  {morningShifts.length > 0 && (
-                    <div className="mb-1">
-                      <p className="text-[9px] uppercase tracking-widest text-neutral-400 mb-0.5">AM</p>
-                      {morningShifts.map((s) => (
-                        <ShiftPill key={s.id} shift={s} onDelete={deleteShift} />
-                      ))}
-                    </div>
-                  )}
-                  {eveningShifts.length > 0 && (
-                    <div className="mb-1">
-                      <p className="text-[9px] uppercase tracking-widest text-neutral-400 mb-0.5">PM</p>
-                      {eveningShifts.map((s) => (
-                        <ShiftPill key={s.id} shift={s} onDelete={deleteShift} />
-                      ))}
-                    </div>
-                  )}
+                  <div className="mb-1">
+                    <p className="text-[9px] uppercase tracking-widest text-neutral-400 mb-0.5">🍸 FOH</p>
+                    {fohShifts.length > 0 ? renderDeptShifts(fohShifts) : (
+                      <p className="text-[9px] text-neutral-300 italic">—</p>
+                    )}
+                  </div>
+                  <div className="border-t border-dashed border-neutral-200 pt-1 mb-1">
+                    <p className="text-[9px] uppercase tracking-widest text-neutral-400 mb-0.5">🔪 Kitchen</p>
+                    {kitchenShifts.length > 0 ? renderDeptShifts(kitchenShifts) : (
+                      <p className="text-[9px] text-neutral-300 italic">—</p>
+                    )}
+                  </div>
                   <button
                     onClick={() => setShowAddShift(date)}
                     className="mt-auto text-[10px] text-neutral-400 hover:text-ink flex items-center gap-0.5 transition py-1"
@@ -228,13 +245,29 @@ export function WeeklySchedule({
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap gap-3 mt-4">
-            {members.map((m) => (
-              <div key={m.id} className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: m.color }} />
-                <span className="text-xs text-neutral-600">{m.name}</span>
+          <div className="flex flex-col sm:flex-row gap-4 mt-4">
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: DEPT_COLORS.foh }} />
+                <p className="text-[10px] uppercase tracking-widest text-neutral-400">Front of House</p>
               </div>
-            ))}
+              <div className="flex flex-wrap gap-2 pl-[18px]">
+                {members.filter((m) => (m.department || 'foh') === 'foh').map((m) => (
+                  <span key={m.id} className="text-xs text-neutral-600">{m.name}</span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: DEPT_COLORS.kitchen }} />
+                <p className="text-[10px] uppercase tracking-widest text-neutral-400">Kitchen</p>
+              </div>
+              <div className="flex flex-wrap gap-2 pl-[18px]">
+                {members.filter((m) => m.department === 'kitchen').map((m) => (
+                  <span key={m.id} className="text-xs text-neutral-600">{m.name}</span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -253,16 +286,17 @@ export function WeeklySchedule({
 }
 
 function ShiftPill({ shift, onDelete }: { shift: Shift; onDelete: (id: string) => void }) {
+  const deptColor = DEPT_COLORS[shift.team_members.department || 'foh'] || DEPT_COLORS.foh;
   return (
     <div
       className="group/pill flex items-center gap-1 rounded px-1.5 py-1 text-[11px] mb-0.5"
-      style={{ backgroundColor: shift.team_members.color + '20' }}
+      style={{ backgroundColor: deptColor + '20' }}
     >
       <div
         className="w-1.5 h-1.5 rounded-full shrink-0"
-        style={{ backgroundColor: shift.team_members.color }}
+        style={{ backgroundColor: deptColor }}
       />
-      <span className="truncate flex-1" style={{ color: shift.team_members.color }}>
+      <span className="truncate flex-1" style={{ color: deptColor }}>
         {shift.team_members.name}
       </span>
       <span className="text-[9px] text-neutral-500 shrink-0">

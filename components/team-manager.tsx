@@ -8,19 +8,25 @@ interface TeamMember {
   id: string;
   name: string;
   role: 'owner' | 'manager' | 'employee';
+  department: 'foh' | 'kitchen';
   color: string;
   active: boolean;
 }
 
-const COLORS = [
-  '#d4a45c', '#4f8cff', '#e05252', '#45b887', '#9b6dd7',
-  '#e6884b', '#5bbcd6', '#d65db1', '#6c757d', '#2c786c',
-];
+const DEPT_COLORS: Record<string, string> = {
+  foh: '#4f8cff',
+  kitchen: '#e6884b',
+};
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner',
   manager: 'Manager',
   employee: 'Employee',
+};
+
+const DEPT_LABELS: Record<string, string> = {
+  foh: 'Front of House',
+  kitchen: 'Kitchen',
 };
 
 export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }) {
@@ -32,13 +38,13 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
 
   const [name, setName] = useState('');
   const [role, setRole] = useState<'owner' | 'manager' | 'employee'>('employee');
-  const [color, setColor] = useState(COLORS[0]);
+  const [department, setDepartment] = useState<'foh' | 'kitchen'>('foh');
 
   function openNew() {
     setEditing(null);
     setName('');
     setRole('employee');
-    setColor(COLORS[members.length % COLORS.length]);
+    setDepartment('foh');
     setShowForm(true);
   }
 
@@ -46,7 +52,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
     setEditing(m);
     setName(m.name);
     setRole(m.role);
-    setColor(m.color);
+    setDepartment(m.department || 'foh');
     setShowForm(true);
   }
 
@@ -60,7 +66,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
         const res = await fetch('/api/team', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: editing.id, name: name.trim(), role, color, active: editing.active }),
+          body: JSON.stringify({ id: editing.id, name: name.trim(), role, department, color: DEPT_COLORS[department], active: editing.active }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -73,7 +79,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
         const res = await fetch('/api/team', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), role, color }),
+          body: JSON.stringify({ name: name.trim(), role, department, color: DEPT_COLORS[department] }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -127,13 +133,13 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
             <div key={m.id} className="flex items-center gap-4 px-5 py-4 group">
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0"
-                style={{ backgroundColor: m.color }}
+                style={{ backgroundColor: DEPT_COLORS[m.department] || DEPT_COLORS.foh }}
               >
                 {m.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">{m.name}</p>
-                <p className="text-xs text-neutral-500">{ROLE_LABELS[m.role]}</p>
+                <p className="text-xs text-neutral-500">{ROLE_LABELS[m.role]} · {DEPT_LABELS[m.department] || 'Front of House'}</p>
               </div>
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
                 <button
@@ -180,33 +186,37 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
                 />
               </div>
 
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Role</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as any)}
-                  className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
-                >
-                  <option value="employee">Employee</option>
-                  <option value="manager">Manager</option>
-                  <option value="owner">Owner</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Role</label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as any)}
+                    className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="manager">Manager</option>
+                    <option value="owner">Owner</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Department</label>
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value as any)}
+                    className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                  >
+                    <option value="foh">Front of House</option>
+                    <option value="kitchen">Kitchen</option>
+                  </select>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Color</label>
-                <div className="flex gap-2 flex-wrap">
-                  {COLORS.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setColor(c)}
-                      className={cn(
-                        'w-8 h-8 rounded-full transition ring-offset-2 ring-offset-cream',
-                        color === c ? 'ring-2 ring-ink' : 'hover:scale-110'
-                      )}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full" style={{ backgroundColor: DEPT_COLORS[department] }} />
+                  <span className="text-xs text-neutral-500">Auto-assigned by department</span>
                 </div>
               </div>
 
