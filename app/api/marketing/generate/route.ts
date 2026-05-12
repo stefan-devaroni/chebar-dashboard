@@ -19,9 +19,9 @@ When generating content:
 - Keep it concise — Instagram captions under 150 words, TikTok under 80 words`;
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.API_KEY_ANTHROPIC;
   if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured.' }, { status: 500 });
+    return NextResponse.json({ error: 'API_KEY_ANTHROPIC not configured.' }, { status: 500 });
   }
 
   const { prompt, platform, contentType } = await request.json();

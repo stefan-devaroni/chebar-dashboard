@@ -15,10 +15,10 @@ When given a document (PnL statement, sales report, product mix report, or other
 Keep it concise and practical. Use AWG (Aruban Florin) or USD as the document indicates. Format with markdown.`;
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.API_KEY_ANTHROPIC;
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'ANTHROPIC_API_KEY not configured. Add it to your .env.local file.' },
+      { error: 'API_KEY_ANTHROPIC not configured. Add it to your .env.local file.' },
       { status: 500 }
     );
   }

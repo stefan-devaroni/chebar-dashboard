@@ -184,7 +184,7 @@ async function parsePdfWithClaude(
   const bytes = await attachment.arrayBuffer();
   const base64 = Buffer.from(bytes).toString('base64');
 
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  const anthropic = new Anthropic({ apiKey: process.env.API_KEY_ANTHROPIC! });
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',

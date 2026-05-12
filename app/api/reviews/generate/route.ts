@@ -15,10 +15,10 @@ Guidelines:
 - If the review mentions specific dishes, drinks, or staff, reference them in your reply.`;
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.API_KEY_ANTHROPIC;
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'ANTHROPIC_API_KEY not configured.' },
+      { error: 'API_KEY_ANTHROPIC not configured.' },
       { status: 500 }
     );
   }

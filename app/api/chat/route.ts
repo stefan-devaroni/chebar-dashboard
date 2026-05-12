@@ -11,9 +11,9 @@ Keep answers concise and practical. Use AWG or USD as appropriate. Format with m
 If the data doesn't contain enough information to answer a question, say so honestly and suggest what data would help.`;
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.API_KEY_ANTHROPIC;
   if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured.' }, { status: 500 });
+    return NextResponse.json({ error: 'API_KEY_ANTHROPIC not configured.' }, { status: 500 });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
