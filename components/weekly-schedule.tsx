@@ -297,7 +297,7 @@ function AddShiftModal({
   function applyPreset(p: 'morning' | 'evening' | 'custom') {
     setPreset(p);
     if (p === 'morning') { setStartTime('07:30'); setEndTime('15:00'); }
-    if (p === 'evening') { setStartTime('15:00'); setEndTime('22:30'); }
+    if (p === 'evening') { setStartTime('15:00'); setEndTime('23:00'); }
   }
 
   const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -347,7 +347,7 @@ function AddShiftModal({
                     preset === p ? 'bg-ink text-cream' : 'border border-neutral-200 hover:bg-white'
                   )}
                 >
-                  {p === 'morning' ? '7:30–3 PM' : p === 'evening' ? '3–10:30 PM' : 'Custom'}
+                  {p === 'morning' ? '7:30–3 PM' : p === 'evening' ? '3–11 PM' : 'Custom'}
                 </button>
               ))}
             </div>
