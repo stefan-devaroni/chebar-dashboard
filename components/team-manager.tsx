@@ -28,6 +28,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [role, setRole] = useState<'owner' | 'manager' | 'employee'>('employee');
@@ -52,31 +53,42 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
   async function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
+    setError(null);
 
-    if (editing) {
-      const res = await fetch('/api/team', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editing.id, name: name.trim(), role, color, active: editing.active }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setMembers((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    try {
+      if (editing) {
+        const res = await fetch('/api/team', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editing.id, name: name.trim(), role, color, active: editing.active }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || 'Failed to update. Make sure the database tables are created.');
+          setSaving(false);
+          return;
+        }
+        setMembers((prev) => prev.map((m) => (m.id === data.id ? data : m)));
+      } else {
+        const res = await fetch('/api/team', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), role, color }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || 'Failed to add. Make sure the database tables are created.');
+          setSaving(false);
+          return;
+        }
+        setMembers((prev) => [...prev, data]);
       }
-    } else {
-      const res = await fetch('/api/team', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), role, color }),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setMembers((prev) => [...prev, created]);
-      }
+      setShowForm(false);
+    } catch {
+      setError('Network error. Try again.');
     }
 
     setSaving(false);
-    setShowForm(false);
   }
 
   async function handleDelete(id: string) {
@@ -197,6 +209,12 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
                   ))}
                 </div>
               </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded px-3 py-2 text-sm text-red-800">
+                  {error}
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button
