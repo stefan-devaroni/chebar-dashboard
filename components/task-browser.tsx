@@ -143,10 +143,10 @@ export function TaskBrowser({ initialData }: { initialData: Category[] }) {
   }
 
   return (
-    <div className="flex gap-8">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
       {/* Sidebar — categories */}
-      <aside className="w-64 shrink-0">
-        <nav className="space-y-1">
+      <aside className="w-full lg:w-64 shrink-0">
+        <nav className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
           {data.map((cat) => {
             const tot = totals.find((t) => t.id === cat.id)!;
             const active = activeCategoryId === cat.id;
@@ -155,7 +155,7 @@ export function TaskBrowser({ initialData }: { initialData: Category[] }) {
                 key={cat.id}
                 onClick={() => setActiveCategoryId(cat.id)}
                 className={cn(
-                  'w-full text-left px-3 py-2.5 rounded text-sm transition flex items-center justify-between',
+                  'w-full lg:w-full text-left px-3 py-2.5 rounded text-sm transition flex items-center justify-between whitespace-nowrap shrink-0',
                   active
                     ? 'bg-ink text-cream'
                     : 'hover:bg-white text-neutral-700'
@@ -182,7 +182,7 @@ export function TaskBrowser({ initialData }: { initialData: Category[] }) {
       {/* Main pane */}
       <div className="flex-1 min-w-0">
         {/* Header with filter tabs + New task button */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h2 className="font-display text-2xl">
             {activeCategory?.icon} {activeCategory?.name}
           </h2>

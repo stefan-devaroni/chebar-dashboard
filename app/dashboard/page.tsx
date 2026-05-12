@@ -59,7 +59,7 @@ export default async function DashboardHome() {
       </header>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
         <MetricCard
           icon={<ListTodo size={18} strokeWidth={1.5} />}
           label="Tasks remaining"
@@ -79,7 +79,7 @@ export default async function DashboardHome() {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Today's focus */}
         <section className="bg-white border border-neutral-200 rounded p-6">
           <h2 className="font-display text-xl mb-4">Open tasks</h2>

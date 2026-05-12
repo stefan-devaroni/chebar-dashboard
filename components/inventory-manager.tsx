@@ -170,7 +170,7 @@ export function InventoryManager({
   return (
     <div>
       {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white border border-neutral-200 rounded p-4">
           <div className="flex items-center gap-2 text-neutral-500 mb-1">
             <Package size={14} strokeWidth={1.5} />
@@ -195,7 +195,7 @@ export function InventoryManager({
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
           <input
@@ -275,8 +275,8 @@ export function InventoryManager({
                 </button>
 
                 {!collapsed && (
-                  <div className="bg-white border border-neutral-200 rounded overflow-hidden">
-                    <table className="w-full text-sm">
+                  <div className="bg-white border border-neutral-200 rounded overflow-x-auto">
+                    <table className="w-full text-sm min-w-[600px]">
                       <thead>
                         <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-500">
                           <th className="text-left px-4 py-2.5 font-normal">Item</th>

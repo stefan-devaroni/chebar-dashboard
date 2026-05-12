@@ -112,13 +112,13 @@ export function MetricsClient({ initialData }: { initialData: DailyMetric[] }) {
       <section className="bg-white border border-neutral-200 rounded p-6">
         <h2 className="font-display text-xl mb-5">Log daily revenue</h2>
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Field label="Date" name="date" type="date" value={form.date} onChange={handleChange} />
             <Field label="Breakfast $" name="revenue_breakfast" type="number" value={form.revenue_breakfast} onChange={handleChange} placeholder="0.00" />
             <Field label="Lunch $" name="revenue_lunch" type="number" value={form.revenue_lunch} onChange={handleChange} placeholder="0.00" />
             <Field label="Dinner $" name="revenue_dinner" type="number" value={form.revenue_dinner} onChange={handleChange} placeholder="0.00" />
           </div>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Field label="Breakfast covers" name="covers_breakfast" type="number" value={form.covers_breakfast} onChange={handleChange} placeholder="0" />
             <Field label="Lunch covers" name="covers_lunch" type="number" value={form.covers_lunch} onChange={handleChange} placeholder="0" />
             <Field label="Dinner covers" name="covers_dinner" type="number" value={form.covers_dinner} onChange={handleChange} placeholder="0" />

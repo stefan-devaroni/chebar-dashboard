@@ -353,7 +353,7 @@ function ManualReviewForm({
         </button>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Platform</label>
             <select

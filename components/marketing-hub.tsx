@@ -92,13 +92,13 @@ export function MarketingHub({
   return (
     <div>
       {/* Sub-tabs */}
-      <div className="flex gap-1 mb-8 border-b border-neutral-200">
+      <div className="flex gap-1 mb-8 border-b border-neutral-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'px-4 py-2.5 text-xs uppercase tracking-widest transition -mb-px',
+              'px-4 py-2.5 text-xs uppercase tracking-widest transition -mb-px whitespace-nowrap shrink-0',
               activeTab === tab.key
                 ? 'border-b-2 border-ink text-ink'
                 : 'text-neutral-500 hover:text-ink'
@@ -316,7 +316,7 @@ function IdeasTab() {
           Generate a month of content ideas based on proven content pillars and value props. Each idea comes with a hook, caption, and hashtags ready to go.
         </p>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <div>
             <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Platform</label>
             <select value={platform} onChange={(e) => setPlatform(e.target.value)}
@@ -408,16 +408,16 @@ function IdeasTab() {
                 <div key={idx} className="bg-white border border-neutral-200 rounded overflow-hidden">
                   <button
                     onClick={() => setExpandedId(expanded ? null : globalIdx)}
-                    className="w-full px-5 py-3.5 text-left flex items-center gap-3 hover:bg-cream/30 transition"
+                    className="w-full px-4 sm:px-5 py-3 sm:py-3.5 text-left flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 hover:bg-cream/30 transition"
                   >
-                    <span className="text-xs text-neutral-400 w-8 shrink-0">#{idea.day}</span>
+                    <span className="text-xs text-neutral-400 w-6 sm:w-8 shrink-0">#{idea.day}</span>
                     <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase tracking-widest shrink-0', PLATFORM_COLORS[idea.platform] ?? 'bg-neutral-100')}>
                       <Icon size={10} /> {idea.platform}
                     </span>
                     <span className="text-[10px] uppercase tracking-widest text-neutral-500 shrink-0">{idea.format}</span>
-                    <span className="flex-1 text-sm font-medium truncate">{idea.hook}</span>
-                    <span className="text-sm shrink-0">{VALUE_EMOJI[idea.value_prop] ?? ''}</span>
-                    <span className={cn('text-[10px] px-2 py-0.5 rounded border shrink-0', pillarColor)}>
+                    <span className="w-full sm:w-auto sm:flex-1 text-sm font-medium truncate order-last sm:order-none">{idea.hook}</span>
+                    <span className="text-sm shrink-0 hidden sm:inline">{VALUE_EMOJI[idea.value_prop] ?? ''}</span>
+                    <span className={cn('text-[10px] px-2 py-0.5 rounded border shrink-0 hidden sm:inline', pillarColor)}>
                       {idea.pillar}
                     </span>
                   </button>
@@ -501,14 +501,14 @@ function PostsTab({ posts, setPosts }: { posts: SocialPost[]; setPosts: (fn: (p:
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="flex gap-1 overflow-x-auto">
           {['all', 'instagram', 'facebook', 'tiktok'].map((p) => (
             <button
               key={p}
               onClick={() => setPlatformFilter(p)}
               className={cn(
-                'px-3 py-1.5 text-xs uppercase tracking-widest rounded transition',
+                'px-3 py-1.5 text-xs uppercase tracking-widest rounded transition whitespace-nowrap shrink-0',
                 platformFilter === p ? 'bg-ink text-cream' : 'text-neutral-600 hover:bg-white'
               )}
             >
@@ -517,7 +517,7 @@ function PostsTab({ posts, setPosts }: { posts: SocialPost[]; setPosts: (fn: (p:
           ))}
         </div>
         <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 bg-gold text-ink px-4 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-gold/80 transition">
+          className="flex items-center gap-1.5 bg-gold text-ink px-4 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-gold/80 transition shrink-0 self-start sm:self-auto">
           <Plus size={14} strokeWidth={2} /> Log post
         </button>
       </div>
@@ -527,8 +527,8 @@ function PostsTab({ posts, setPosts }: { posts: SocialPost[]; setPosts: (fn: (p:
           <p className="text-sm text-neutral-500">No posts logged yet. Click "Log post" to track your social media activity.</p>
         </div>
       ) : (
-        <div className="bg-white border border-neutral-200 rounded overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white border border-neutral-200 rounded overflow-x-auto">
+          <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-500">
                 <th className="text-left px-4 py-2.5 font-normal">Date</th>
@@ -603,7 +603,7 @@ function AddPostModal({ onClose, onSave }: { onClose: () => void; onSave: (data:
           <button onClick={onClose} className="text-neutral-400 hover:text-ink transition"><X size={18} /></button>
         </div>
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Platform</label>
               <select value={platform} onChange={(e) => setPlatform(e.target.value)}
@@ -634,7 +634,7 @@ function AddPostModal({ onClose, onSave }: { onClose: () => void; onSave: (data:
             <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={2}
               className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold resize-y" />
           </div>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Likes</label>
               <input type="number" min="0" value={likes} onChange={(e) => setLikes(parseInt(e.target.value) || 0)}
@@ -750,7 +750,7 @@ function CampaignsTab({ campaigns, setCampaigns }: { campaigns: Campaign[]; setC
                     <Trash2 size={14} />
                   </button>
                 </div>
-                <div className="grid grid-cols-5 gap-4 text-center">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 sm:gap-4 text-center">
                   <div>
                     <p className="text-xs text-neutral-500">Budget</p>
                     <p className="font-medium">${c.budget.toFixed(0)}</p>
