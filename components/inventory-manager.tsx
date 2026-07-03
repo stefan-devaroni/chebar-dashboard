@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Plus, X, Search, ShoppingCart, Package, ChevronDown, ChevronUp, Truck, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText } from 'lucide-react';
 
 interface Supplier {
   id: string;
@@ -59,8 +59,9 @@ export function InventoryManager({
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [showOrderSheet, setShowOrderSheet] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [editingStock, setEditingStock] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<{ id: string; field: 'par_stock' | 'current_stock' } | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
@@ -73,7 +74,7 @@ export function InventoryManager({
       result = result.filter((i) => i.category === categoryFilter);
     }
     if (viewMode === 'order') {
-      result = result.filter((i) => i.current_stock < i.par_stock);
+      result = result.filter((i) => i.par_stock > 0 && i.current_stock < i.par_stock);
     }
     if (viewMode === 'low') {
       result = result.filter((i) => i.par_stock > 0 && i.current_stock <= i.par_stock * 0.5);
@@ -93,7 +94,7 @@ export function InventoryManager({
     });
   }, [filtered]);
 
-  const needsOrder = items.filter((i) => i.current_stock < i.par_stock);
+  const needsOrder = items.filter((i) => i.par_stock > 0 && i.current_stock < i.par_stock);
 
   function toggleCategory(cat: string) {
     setCollapsedCategories((prev) => {
@@ -103,17 +104,29 @@ export function InventoryManager({
     });
   }
 
-  async function updateStock(id: string, currentStock: number) {
+  async function updateField(id: string, field: string, value: any) {
     const res = await fetch('/api/inventory', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, current_stock: currentStock }),
+      body: JSON.stringify({ id, [field]: value }),
     });
     if (res.ok) {
       const updated = await res.json();
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
     }
-    setEditingStock(null);
+    setEditingField(null);
+  }
+
+  async function updateSupplier(id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) {
+    const res = await fetch('/api/inventory', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, [field]: value || null }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    }
   }
 
   async function deleteItem(id: string) {
@@ -170,18 +183,18 @@ export function InventoryManager({
   return (
     <div>
       {/* Stats bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-white border border-neutral-200 rounded p-4">
           <div className="flex items-center gap-2 text-neutral-500 mb-1">
             <Package size={14} strokeWidth={1.5} />
-            <span className="text-xs uppercase tracking-widest">Total items</span>
+            <span className="text-xs uppercase tracking-widest">Items</span>
           </div>
           <span className="font-display text-2xl">{items.length}</span>
         </div>
         <div className={cn('border rounded p-4', needsOrder.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-neutral-200')}>
           <div className="flex items-center gap-2 text-neutral-500 mb-1">
             <ShoppingCart size={14} strokeWidth={1.5} />
-            <span className="text-xs uppercase tracking-widest">Needs ordering</span>
+            <span className="text-xs uppercase tracking-widest">To order</span>
           </div>
           <span className="font-display text-2xl">{needsOrder.length}</span>
         </div>
@@ -196,7 +209,7 @@ export function InventoryManager({
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[180px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
@@ -217,7 +230,7 @@ export function InventoryManager({
           ))}
         </select>
         <div className="flex gap-1 text-xs">
-          {([['all', 'All'], ['order', 'Needs order'], ['low', 'Low stock']] as const).map(([k, label]) => (
+          {([['all', 'All'], ['order', 'To order'], ['low', 'Low']] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setViewMode(k)}
@@ -230,12 +243,25 @@ export function InventoryManager({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {needsOrder.length > 0 && (
+          <button
+            onClick={() => setShowOrderSheet(true)}
+            className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-red-700 transition"
+          >
+            <ClipboardList size={14} strokeWidth={2} />
+            Generate order ({needsOrder.length} items)
+          </button>
+        )}
         <button
           onClick={() => setShowAddSupplier(true)}
           className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
         >
           <Truck size={12} strokeWidth={2} />
-          Supplier
+          Add supplier
         </button>
         <button
           onClick={() => { setEditingItem(null); setShowAddItem(true); }}
@@ -251,7 +277,7 @@ export function InventoryManager({
         <div className="bg-white border border-neutral-200 rounded p-10 text-center">
           <p className="text-sm text-neutral-500">
             {items.length === 0
-              ? 'No inventory items yet. Run the seed SQL or add items above.'
+              ? 'No inventory items yet. Add items above.'
               : 'No items match your filters.'}
           </p>
         </div>
@@ -259,6 +285,7 @@ export function InventoryManager({
         <div className="space-y-4">
           {grouped.map(([category, catItems]) => {
             const collapsed = collapsedCategories.has(category);
+            const catNeedsOrder = catItems.filter((i) => i.par_stock > 0 && i.current_stock < i.par_stock).length;
             return (
               <section key={category}>
                 <button
@@ -266,26 +293,31 @@ export function InventoryManager({
                   className="flex items-center gap-2 mb-2 w-full text-left"
                 >
                   {collapsed
-                    ? <ChevronDown size={14} className="text-neutral-400" />
-                    : <ChevronUp size={14} className="text-neutral-400" />}
+                    ? <ChevronRight size={14} className="text-neutral-400" />
+                    : <ChevronDown size={14} className="text-neutral-400" />}
                   <h3 className="text-xs uppercase tracking-widest text-neutral-500">
                     {CATEGORIES[category] ?? category}
                   </h3>
                   <span className="text-xs text-neutral-400">({catItems.length})</span>
+                  {catNeedsOrder > 0 && (
+                    <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
+                      {catNeedsOrder} to order
+                    </span>
+                  )}
                 </button>
 
                 {!collapsed && (
                   <div className="bg-white border border-neutral-200 rounded overflow-x-auto">
-                    <table className="w-full text-sm min-w-[600px]">
+                    <table className="w-full text-sm min-w-[800px]">
                       <thead>
                         <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-500">
                           <th className="text-left px-4 py-2.5 font-normal">Item</th>
-                          <th className="text-left px-3 py-2.5 font-normal w-20">Unit</th>
-                          <th className="text-center px-3 py-2.5 font-normal w-16">Par</th>
-                          <th className="text-center px-3 py-2.5 font-normal w-20">Current</th>
-                          <th className="text-center px-3 py-2.5 font-normal w-16">Order</th>
-                          <th className="text-left px-3 py-2.5 font-normal w-32">Supplier</th>
-                          <th className="px-3 py-2.5 w-16"></th>
+                          <th className="text-center px-2 py-2.5 font-normal w-16">Par</th>
+                          <th className="text-center px-2 py-2.5 font-normal w-20">Actual</th>
+                          <th className="text-center px-2 py-2.5 font-normal w-16">Buy</th>
+                          <th className="text-left px-2 py-2.5 font-normal w-36">Supplier</th>
+                          <th className="text-left px-2 py-2.5 font-normal w-36">Backup</th>
+                          <th className="px-2 py-2.5 w-14"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -303,31 +335,60 @@ export function InventoryManager({
                                 isLow && !isCritical && 'bg-amber-50/50'
                               )}
                             >
-                              <td className="px-4 py-2.5">
+                              {/* Item name */}
+                              <td className="px-4 py-2">
                                 <span className="font-medium">{item.name}</span>
                                 {item.unit_size && (
                                   <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>
                                 )}
+                                <span className="text-xs text-neutral-400 ml-1.5">/ {item.unit}</span>
                               </td>
-                              <td className="px-3 py-2.5 text-neutral-600">{item.unit}</td>
-                              <td className="px-3 py-2.5 text-center text-neutral-600">{item.par_stock}</td>
-                              <td className="px-3 py-2.5 text-center">
-                                {editingStock === item.id ? (
+
+                              {/* Par stock — click to edit */}
+                              <td className="px-2 py-2 text-center">
+                                {editingField?.id === item.id && editingField.field === 'par_stock' ? (
                                   <input
                                     type="number"
                                     min="0"
-                                    defaultValue={item.current_stock}
+                                    step="0.5"
+                                    defaultValue={item.par_stock}
                                     autoFocus
-                                    onBlur={(e) => updateStock(item.id, parseFloat(e.target.value) || 0)}
+                                    onBlur={(e) => updateField(item.id, 'par_stock', parseFloat(e.target.value) || 0)}
                                     onKeyDown={(e) => {
-                                      if (e.key === 'Enter') updateStock(item.id, parseFloat(e.currentTarget.value) || 0);
-                                      if (e.key === 'Escape') setEditingStock(null);
+                                      if (e.key === 'Enter') updateField(item.id, 'par_stock', parseFloat(e.currentTarget.value) || 0);
+                                      if (e.key === 'Escape') setEditingField(null);
                                     }}
-                                    className="w-16 text-center bg-cream border border-neutral-200 rounded px-1.5 py-0.5 text-sm focus:outline-none focus:border-gold"
+                                    className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none"
                                   />
                                 ) : (
                                   <button
-                                    onClick={() => setEditingStock(item.id)}
+                                    onClick={() => setEditingField({ id: item.id, field: 'par_stock' })}
+                                    className="text-neutral-600 hover:bg-neutral-100 px-2 py-0.5 rounded transition"
+                                  >
+                                    {item.par_stock}
+                                  </button>
+                                )}
+                              </td>
+
+                              {/* Actual stock — click to edit */}
+                              <td className="px-2 py-2 text-center">
+                                {editingField?.id === item.id && editingField.field === 'current_stock' ? (
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    defaultValue={item.current_stock}
+                                    autoFocus
+                                    onBlur={(e) => updateField(item.id, 'current_stock', parseFloat(e.target.value) || 0)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') updateField(item.id, 'current_stock', parseFloat(e.currentTarget.value) || 0);
+                                      if (e.key === 'Escape') setEditingField(null);
+                                    }}
+                                    className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none"
+                                  />
+                                ) : (
+                                  <button
+                                    onClick={() => setEditingField({ id: item.id, field: 'current_stock' })}
                                     className={cn(
                                       'font-medium px-2 py-0.5 rounded transition',
                                       isCritical ? 'text-red-700 bg-red-100' :
@@ -339,27 +400,58 @@ export function InventoryManager({
                                   </button>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-center">
+
+                              {/* To buy (calculated) */}
+                              <td className="px-2 py-2 text-center">
                                 {deficit > 0 ? (
-                                  <span className="text-red-700 font-medium">{deficit}</span>
+                                  <span className="text-red-700 font-bold">{deficit}</span>
                                 ) : (
-                                  <span className="text-green-600">--</span>
+                                  <span className="text-green-600 text-xs">OK</span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-xs text-neutral-500 truncate max-w-[120px]">
-                                {item.supplier?.name ?? '--'}
+
+                              {/* Supplier dropdown */}
+                              <td className="px-2 py-2">
+                                <select
+                                  value={item.supplier_id ?? ''}
+                                  onChange={(e) => updateSupplier(item.id, 'supplier_id', e.target.value)}
+                                  className="w-full bg-transparent border-0 text-xs text-neutral-600 py-0.5 focus:outline-none focus:ring-1 focus:ring-gold rounded cursor-pointer"
+                                >
+                                  <option value="">--</option>
+                                  {suppliers.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                  ))}
+                                </select>
                               </td>
-                              <td className="px-3 py-2.5">
+
+                              {/* Backup supplier dropdown */}
+                              <td className="px-2 py-2">
+                                <select
+                                  value={item.backup_supplier_id ?? ''}
+                                  onChange={(e) => updateSupplier(item.id, 'backup_supplier_id', e.target.value)}
+                                  className="w-full bg-transparent border-0 text-xs text-neutral-400 py-0.5 focus:outline-none focus:ring-1 focus:ring-gold rounded cursor-pointer"
+                                >
+                                  <option value="">--</option>
+                                  {suppliers.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                  ))}
+                                </select>
+                              </td>
+
+                              {/* Actions */}
+                              <td className="px-2 py-2">
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
                                   <button
                                     onClick={() => { setEditingItem(item); setShowAddItem(true); }}
                                     className="p-1 text-neutral-400 hover:text-ink transition"
+                                    title="Edit details"
                                   >
                                     <Pencil size={12} strokeWidth={1.5} />
                                   </button>
                                   <button
                                     onClick={() => deleteItem(item.id)}
                                     className="p-1 text-neutral-400 hover:text-red-600 transition"
+                                    title="Delete"
                                   >
                                     <Trash2 size={12} strokeWidth={1.5} />
                                   </button>
@@ -395,6 +487,164 @@ export function InventoryManager({
           onSave={handleSaveSupplier}
         />
       )}
+
+      {/* Order sheet modal — grouped by supplier */}
+      {showOrderSheet && (
+        <OrderSheetModal
+          items={needsOrder}
+          suppliers={suppliers}
+          onClose={() => setShowOrderSheet(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function OrderSheetModal({
+  items,
+  suppliers,
+  onClose,
+}: {
+  items: InventoryItem[];
+  suppliers: Supplier[];
+  onClose: () => void;
+}) {
+  const supplierMap = useMemo(() => {
+    const map: Record<string, { supplierName: string; items: (InventoryItem & { toBuy: number })[] }> = {};
+
+    for (const item of items) {
+      const deficit = Math.max(0, item.par_stock - item.current_stock);
+      if (deficit <= 0) continue;
+
+      const supplierId = item.supplier_id ?? '__none__';
+
+      if (!map[supplierId]) {
+        map[supplierId] = {
+          supplierName: item.supplier?.name ?? 'No supplier assigned',
+          items: [],
+        };
+      }
+      map[supplierId].items.push({ ...item, toBuy: deficit });
+    }
+
+    const sorted = Object.entries(map).sort(([a], [b]) => {
+      if (a === '__none__') return 1;
+      if (b === '__none__') return -1;
+      return map[a].supplierName.localeCompare(map[b].supplierName);
+    });
+
+    return sorted;
+  }, [items]);
+
+  function copySupplierList(supplierItems: (InventoryItem & { toBuy: number })[], supplierName: string): void {
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    let text = `Order for ${supplierName} — ${today}\n`;
+    text += '─'.repeat(40) + '\n';
+    for (const item of supplierItems) {
+      text += `${item.toBuy} ${item.unit}  ${item.name}`;
+      if (item.unit_size) text += ` (${item.unit_size})`;
+      text += '\n';
+    }
+    navigator.clipboard.writeText(text);
+  }
+
+  function copyFullOrder() {
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    let text = `Che Bar — Purchase Order — ${today}\n`;
+    text += '═'.repeat(40) + '\n\n';
+
+    for (const [, { supplierName, items: sItems }] of supplierMap) {
+      text += `▸ ${supplierName}\n`;
+      text += '─'.repeat(40) + '\n';
+      for (const item of sItems) {
+        text += `  ${item.toBuy} ${item.unit}  ${item.name}`;
+        if (item.unit_size) text += ` (${item.unit_size})`;
+        text += '\n';
+      }
+      text += '\n';
+    }
+
+    navigator.clipboard.writeText(text);
+  }
+
+  const totalItems = items.filter((i) => i.par_stock - i.current_stock > 0).length;
+
+  return (
+    <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div
+        className="bg-cream border border-neutral-200 rounded-lg w-full max-w-2xl shadow-lg max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
+          <div>
+            <h2 className="font-display text-xl">Purchase Order</h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              {totalItems} items to order from {supplierMap.length} supplier{supplierMap.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={copyFullOrder}
+              className="flex items-center gap-1.5 bg-ink text-cream px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition"
+            >
+              <FileText size={12} strokeWidth={2} />
+              Copy all
+            </button>
+            <button onClick={onClose} className="text-neutral-400 hover:text-ink transition p-1">
+              <X size={18} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto px-6 py-4 space-y-6">
+          {supplierMap.map(([supplierId, { supplierName, items: sItems }]) => (
+            <div key={supplierId}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Truck size={14} className="text-neutral-400" />
+                  <h3 className="font-medium text-sm">
+                    {supplierName}
+                  </h3>
+                  <span className="text-xs text-neutral-400">({sItems.length} items)</span>
+                </div>
+                <button
+                  onClick={() => copySupplierList(sItems, supplierName)}
+                  className="text-xs text-gold hover:text-gold/80 uppercase tracking-widest transition"
+                >
+                  Copy list
+                </button>
+              </div>
+              <div className="bg-white border border-neutral-200 rounded overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-400">
+                      <th className="text-left px-4 py-2 font-normal">Item</th>
+                      <th className="text-center px-3 py-2 font-normal w-16">Buy</th>
+                      <th className="text-left px-3 py-2 font-normal w-16">Unit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sItems.map((item) => (
+                      <tr key={item.id} className="border-b border-neutral-50 last:border-b-0">
+                        <td className="px-4 py-2">
+                          {item.name}
+                          {item.unit_size && (
+                            <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center font-bold text-red-700">{item.toBuy}</td>
+                        <td className="px-3 py-2 text-neutral-500">{item.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -471,7 +721,7 @@ function ItemModal({
               <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Unit</label>
               <select value={unit} onChange={(e) => setUnit(e.target.value)}
                 className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold">
-                {['each', 'bottle', 'can', 'case', 'box', 'bag', 'lb', 'gallon', 'quart', 'pint', 'jar', 'container', 'pack', 'sleeve', 'roll', 'flat', 'loaf', 'dozen', 'head', 'bunch', 'wheel', 'tub', 'batch'].map((u) => (
+                {['each', 'bottle', 'can', 'case', 'box', 'bag', 'lb', 'gallon', 'quart', 'pint', 'jar', 'container', 'pack', 'sleeve', 'roll', 'flat', 'loaf', 'dozen', 'head', 'bunch', 'wheel', 'tub', 'batch', 'ball'].map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </select>
