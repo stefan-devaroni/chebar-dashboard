@@ -4,17 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, ListChecks, LineChart, Music, FileBarChart, Megaphone, Users, CalendarDays, ShoppingCart, Menu, X } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ShoppingCart, Megaphone, Menu, X } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
-  { href: '/dashboard/team', label: 'Team', icon: Users },
   { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart },
-  { href: '/dashboard/metrics', label: 'Metrics', icon: LineChart },
-  { href: '/dashboard/music', label: 'Music ROI', icon: Music },
-  { href: '/dashboard/reports', label: 'Reports', icon: FileBarChart },
   { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
 ];
 
