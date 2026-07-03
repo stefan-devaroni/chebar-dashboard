@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, ListChecks, LineChart, Music, FileBarChart, Megaphone, Users, CalendarDays, ShoppingCart, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, ListChecks, LineChart, Music, FileBarChart, Megaphone, Users, CalendarDays, ShoppingCart, Menu, X } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -19,17 +18,9 @@ const navItems = [
   { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
 ];
 
-export function NavSidebar({ userEmail }: { userEmail: string }) {
+export function NavSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const supabase = createClient();
   const [open, setOpen] = useState(false);
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
-  }
 
   const navContent = (
     <>
@@ -71,17 +62,7 @@ export function NavSidebar({ userEmail }: { userEmail: string }) {
       </nav>
 
       <div className="px-3 py-6 border-t border-neutral-800">
-        <div className="px-3 mb-3">
-          <p className="text-[10px] uppercase tracking-widest text-neutral-500">Signed in</p>
-          <p className="text-xs text-neutral-300 truncate">{userEmail}</p>
-        </div>
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded text-sm text-neutral-400 hover:text-cream hover:bg-neutral-900 transition"
-        >
-          <LogOut size={16} strokeWidth={1.5} />
-          Sign out
-        </button>
+        <p className="px-3 text-[10px] uppercase tracking-widest text-neutral-500">Che Bar Aruba</p>
       </div>
     </>
   );

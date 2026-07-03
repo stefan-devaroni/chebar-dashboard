@@ -4,7 +4,6 @@ import { CheckCircle2, ListTodo, Flame, CalendarClock } from 'lucide-react';
 
 export default async function DashboardHome() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
   const { count: totalTasks } = await supabase
     .from('tasks')
@@ -55,7 +54,7 @@ export default async function DashboardHome() {
         <p className="text-xs uppercase tracking-widest text-neutral-500 mb-2">
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
-        <h1 className="font-display text-4xl">Good day, {user?.email?.split('@')[0]}</h1>
+        <h1 className="font-display text-4xl">Che Bar Dashboard</h1>
       </header>
 
       {/* Metric cards */}
