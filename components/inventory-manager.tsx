@@ -307,162 +307,56 @@ export function InventoryManager({
                 </button>
 
                 {!collapsed && (
-                  <div className="bg-white border border-neutral-200 rounded overflow-x-auto">
-                    <table className="w-full text-sm min-w-[800px]">
-                      <thead>
-                        <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-500">
-                          <th className="text-left px-4 py-2.5 font-normal">Item</th>
-                          <th className="text-center px-2 py-2.5 font-normal w-16">Par</th>
-                          <th className="text-center px-2 py-2.5 font-normal w-20">Actual</th>
-                          <th className="text-center px-2 py-2.5 font-normal w-16">Buy</th>
-                          <th className="text-left px-2 py-2.5 font-normal w-36">Supplier</th>
-                          <th className="text-left px-2 py-2.5 font-normal w-36">Backup</th>
-                          <th className="px-2 py-2.5 w-14"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {catItems.map((item) => {
-                          const deficit = Math.max(0, item.par_stock - item.current_stock);
-                          const isLow = item.par_stock > 0 && item.current_stock < item.par_stock;
-                          const isCritical = item.par_stock > 0 && item.current_stock <= item.par_stock * 0.5;
-
-                          return (
-                            <tr
+                  <>
+                    {/* Desktop table */}
+                    <div className="hidden lg:block bg-white border border-neutral-200 rounded overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-500">
+                            <th className="text-left px-4 py-2.5 font-normal">Item</th>
+                            <th className="text-center px-2 py-2.5 font-normal w-16">Par</th>
+                            <th className="text-center px-2 py-2.5 font-normal w-20">Actual</th>
+                            <th className="text-center px-2 py-2.5 font-normal w-16">Buy</th>
+                            <th className="text-left px-2 py-2.5 font-normal w-36">Supplier</th>
+                            <th className="text-left px-2 py-2.5 font-normal w-36">Backup</th>
+                            <th className="px-2 py-2.5 w-14"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {catItems.map((item) => (
+                            <DesktopRow
                               key={item.id}
-                              className={cn(
-                                'border-b border-neutral-50 last:border-b-0 group',
-                                isCritical && 'bg-red-50/50',
-                                isLow && !isCritical && 'bg-amber-50/50'
-                              )}
-                            >
-                              {/* Item name */}
-                              <td className="px-4 py-2">
-                                <span className="font-medium">{item.name}</span>
-                                {item.unit_size && (
-                                  <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>
-                                )}
-                                <span className="text-xs text-neutral-400 ml-1.5">/ {item.unit}</span>
-                              </td>
+                              item={item}
+                              suppliers={suppliers}
+                              editingField={editingField}
+                              setEditingField={setEditingField}
+                              updateField={updateField}
+                              updateSupplier={updateSupplier}
+                              onEdit={() => { setEditingItem(item); setShowAddItem(true); }}
+                              onDelete={() => deleteItem(item.id)}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
 
-                              {/* Par stock — click to edit */}
-                              <td className="px-2 py-2 text-center">
-                                {editingField?.id === item.id && editingField.field === 'par_stock' ? (
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.5"
-                                    defaultValue={item.par_stock}
-                                    autoFocus
-                                    onBlur={(e) => updateField(item.id, 'par_stock', parseFloat(e.target.value) || 0)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') updateField(item.id, 'par_stock', parseFloat(e.currentTarget.value) || 0);
-                                      if (e.key === 'Escape') setEditingField(null);
-                                    }}
-                                    className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none"
-                                  />
-                                ) : (
-                                  <button
-                                    onClick={() => setEditingField({ id: item.id, field: 'par_stock' })}
-                                    className="text-neutral-600 hover:bg-neutral-100 px-2 py-0.5 rounded transition"
-                                  >
-                                    {item.par_stock}
-                                  </button>
-                                )}
-                              </td>
-
-                              {/* Actual stock — click to edit */}
-                              <td className="px-2 py-2 text-center">
-                                {editingField?.id === item.id && editingField.field === 'current_stock' ? (
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.5"
-                                    defaultValue={item.current_stock}
-                                    autoFocus
-                                    onBlur={(e) => updateField(item.id, 'current_stock', parseFloat(e.target.value) || 0)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') updateField(item.id, 'current_stock', parseFloat(e.currentTarget.value) || 0);
-                                      if (e.key === 'Escape') setEditingField(null);
-                                    }}
-                                    className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none"
-                                  />
-                                ) : (
-                                  <button
-                                    onClick={() => setEditingField({ id: item.id, field: 'current_stock' })}
-                                    className={cn(
-                                      'font-medium px-2 py-0.5 rounded transition',
-                                      isCritical ? 'text-red-700 bg-red-100' :
-                                      isLow ? 'text-amber-700 bg-amber-100' :
-                                      'text-neutral-700 hover:bg-neutral-100'
-                                    )}
-                                  >
-                                    {item.current_stock}
-                                  </button>
-                                )}
-                              </td>
-
-                              {/* To buy (calculated) */}
-                              <td className="px-2 py-2 text-center">
-                                {deficit > 0 ? (
-                                  <span className="text-red-700 font-bold">{deficit}</span>
-                                ) : (
-                                  <span className="text-green-600 text-xs">OK</span>
-                                )}
-                              </td>
-
-                              {/* Supplier dropdown */}
-                              <td className="px-2 py-2">
-                                <select
-                                  value={item.supplier_id ?? ''}
-                                  onChange={(e) => updateSupplier(item.id, 'supplier_id', e.target.value)}
-                                  className="w-full bg-transparent border-0 text-xs text-neutral-600 py-0.5 focus:outline-none focus:ring-1 focus:ring-gold rounded cursor-pointer"
-                                >
-                                  <option value="">--</option>
-                                  {suppliers.map((s) => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                  ))}
-                                </select>
-                              </td>
-
-                              {/* Backup supplier dropdown */}
-                              <td className="px-2 py-2">
-                                <select
-                                  value={item.backup_supplier_id ?? ''}
-                                  onChange={(e) => updateSupplier(item.id, 'backup_supplier_id', e.target.value)}
-                                  className="w-full bg-transparent border-0 text-xs text-neutral-400 py-0.5 focus:outline-none focus:ring-1 focus:ring-gold rounded cursor-pointer"
-                                >
-                                  <option value="">--</option>
-                                  {suppliers.map((s) => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                  ))}
-                                </select>
-                              </td>
-
-                              {/* Actions */}
-                              <td className="px-2 py-2">
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                                  <button
-                                    onClick={() => { setEditingItem(item); setShowAddItem(true); }}
-                                    className="p-1 text-neutral-400 hover:text-ink transition"
-                                    title="Edit details"
-                                  >
-                                    <Pencil size={12} strokeWidth={1.5} />
-                                  </button>
-                                  <button
-                                    onClick={() => deleteItem(item.id)}
-                                    className="p-1 text-neutral-400 hover:text-red-600 transition"
-                                    title="Delete"
-                                  >
-                                    <Trash2 size={12} strokeWidth={1.5} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                    {/* Mobile cards */}
+                    <div className="lg:hidden space-y-2">
+                      {catItems.map((item) => (
+                        <MobileCard
+                          key={item.id}
+                          item={item}
+                          suppliers={suppliers}
+                          editingField={editingField}
+                          setEditingField={setEditingField}
+                          updateField={updateField}
+                          updateSupplier={updateSupplier}
+                          onEdit={() => { setEditingItem(item); setShowAddItem(true); }}
+                          onDelete={() => deleteItem(item.id)}
+                        />
+                      ))}
+                    </div>
+                  </>
                 )}
               </section>
             );
@@ -495,6 +389,205 @@ export function InventoryManager({
           suppliers={suppliers}
           onClose={() => setShowOrderSheet(false)}
         />
+      )}
+    </div>
+  );
+}
+
+function DesktopRow({
+  item, suppliers, editingField, setEditingField, updateField, updateSupplier, onEdit, onDelete,
+}: {
+  item: InventoryItem;
+  suppliers: Supplier[];
+  editingField: { id: string; field: 'par_stock' | 'current_stock' } | null;
+  setEditingField: (f: { id: string; field: 'par_stock' | 'current_stock' } | null) => void;
+  updateField: (id: string, field: string, value: any) => void;
+  updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const deficit = Math.max(0, item.par_stock - item.current_stock);
+  const isLow = item.par_stock > 0 && item.current_stock < item.par_stock;
+  const isCritical = item.par_stock > 0 && item.current_stock <= item.par_stock * 0.5;
+
+  return (
+    <tr className={cn(
+      'border-b border-neutral-50 last:border-b-0 group',
+      isCritical && 'bg-red-50/50',
+      isLow && !isCritical && 'bg-amber-50/50'
+    )}>
+      <td className="px-4 py-2">
+        <span className="font-medium">{item.name}</span>
+        {item.unit_size && <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>}
+        <span className="text-xs text-neutral-400 ml-1.5">/ {item.unit}</span>
+      </td>
+      <td className="px-2 py-2 text-center">
+        {editingField?.id === item.id && editingField.field === 'par_stock' ? (
+          <input type="number" min="0" step="0.5" defaultValue={item.par_stock} autoFocus
+            onBlur={(e) => updateField(item.id, 'par_stock', parseFloat(e.target.value) || 0)}
+            onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'par_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
+            className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none" />
+        ) : (
+          <button onClick={() => setEditingField({ id: item.id, field: 'par_stock' })}
+            className="text-neutral-600 hover:bg-neutral-100 px-2 py-0.5 rounded transition">{item.par_stock}</button>
+        )}
+      </td>
+      <td className="px-2 py-2 text-center">
+        {editingField?.id === item.id && editingField.field === 'current_stock' ? (
+          <input type="number" min="0" step="0.5" defaultValue={item.current_stock} autoFocus
+            onBlur={(e) => updateField(item.id, 'current_stock', parseFloat(e.target.value) || 0)}
+            onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'current_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
+            className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none" />
+        ) : (
+          <button onClick={() => setEditingField({ id: item.id, field: 'current_stock' })}
+            className={cn('font-medium px-2 py-0.5 rounded transition',
+              isCritical ? 'text-red-700 bg-red-100' : isLow ? 'text-amber-700 bg-amber-100' : 'text-neutral-700 hover:bg-neutral-100'
+            )}>{item.current_stock}</button>
+        )}
+      </td>
+      <td className="px-2 py-2 text-center">
+        {deficit > 0 ? <span className="text-red-700 font-bold">{deficit}</span> : <span className="text-green-600 text-xs">OK</span>}
+      </td>
+      <td className="px-2 py-2">
+        <select value={item.supplier_id ?? ''} onChange={(e) => updateSupplier(item.id, 'supplier_id', e.target.value)}
+          className="w-full bg-transparent border-0 text-xs text-neutral-600 py-0.5 focus:outline-none focus:ring-1 focus:ring-gold rounded cursor-pointer">
+          <option value="">--</option>
+          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </td>
+      <td className="px-2 py-2">
+        <select value={item.backup_supplier_id ?? ''} onChange={(e) => updateSupplier(item.id, 'backup_supplier_id', e.target.value)}
+          className="w-full bg-transparent border-0 text-xs text-neutral-400 py-0.5 focus:outline-none focus:ring-1 focus:ring-gold rounded cursor-pointer">
+          <option value="">--</option>
+          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </td>
+      <td className="px-2 py-2">
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+          <button onClick={onEdit} className="p-1 text-neutral-400 hover:text-ink transition" title="Edit details">
+            <Pencil size={12} strokeWidth={1.5} />
+          </button>
+          <button onClick={onDelete} className="p-1 text-neutral-400 hover:text-red-600 transition" title="Delete">
+            <Trash2 size={12} strokeWidth={1.5} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function MobileCard({
+  item, suppliers, editingField, setEditingField, updateField, updateSupplier, onEdit, onDelete,
+}: {
+  item: InventoryItem;
+  suppliers: Supplier[];
+  editingField: { id: string; field: 'par_stock' | 'current_stock' } | null;
+  setEditingField: (f: { id: string; field: 'par_stock' | 'current_stock' } | null) => void;
+  updateField: (id: string, field: string, value: any) => void;
+  updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const deficit = Math.max(0, item.par_stock - item.current_stock);
+  const isLow = item.par_stock > 0 && item.current_stock < item.par_stock;
+  const isCritical = item.par_stock > 0 && item.current_stock <= item.par_stock * 0.5;
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={cn(
+      'bg-white border rounded px-2.5 py-2.5',
+      isCritical ? 'border-red-200 bg-red-50/30' :
+      isLow ? 'border-amber-200 bg-amber-50/30' :
+      'border-neutral-200'
+    )}>
+      {/* Top row: name + numbers */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <button onClick={() => setExpanded(!expanded)} className="text-left w-full">
+            <span className="font-medium text-sm block truncate">{item.name}</span>
+            <span className="text-xs text-neutral-400">{item.unit}{item.unit_size ? ` (${item.unit_size})` : ''}</span>
+          </button>
+        </div>
+
+        {/* Par / Actual / Buy compact row */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {/* Par */}
+          <div className="text-center w-10">
+            <div className="text-[9px] uppercase tracking-wider text-neutral-400">Par</div>
+            {editingField?.id === item.id && editingField.field === 'par_stock' ? (
+              <input type="number" min="0" step="0.5" defaultValue={item.par_stock} autoFocus
+                onBlur={(e) => updateField(item.id, 'par_stock', parseFloat(e.target.value) || 0)}
+                onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'par_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
+                className="w-10 text-center bg-cream border border-gold rounded px-0.5 py-0.5 text-sm focus:outline-none" />
+            ) : (
+              <button onClick={() => setEditingField({ id: item.id, field: 'par_stock' })}
+                className="text-sm text-neutral-600 px-1 py-0.5 rounded hover:bg-neutral-100">{item.par_stock}</button>
+            )}
+          </div>
+
+          {/* Actual */}
+          <div className="text-center w-12">
+            <div className="text-[9px] uppercase tracking-wider text-neutral-400">Have</div>
+            {editingField?.id === item.id && editingField.field === 'current_stock' ? (
+              <input type="number" min="0" step="0.5" defaultValue={item.current_stock} autoFocus
+                onBlur={(e) => updateField(item.id, 'current_stock', parseFloat(e.target.value) || 0)}
+                onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'current_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
+                className="w-12 text-center bg-cream border border-gold rounded px-0.5 py-0.5 text-sm font-medium focus:outline-none" />
+            ) : (
+              <button onClick={() => setEditingField({ id: item.id, field: 'current_stock' })}
+                className={cn('text-sm font-bold px-1.5 py-0.5 rounded transition',
+                  isCritical ? 'text-red-700 bg-red-100' : isLow ? 'text-amber-700 bg-amber-100' : 'text-neutral-700 bg-neutral-100'
+                )}>{item.current_stock}</button>
+            )}
+          </div>
+
+          {/* Buy */}
+          <div className="text-center w-10">
+            <div className="text-[9px] uppercase tracking-wider text-neutral-400">Buy</div>
+            {deficit > 0 ? (
+              <span className="text-sm font-bold text-red-700">{deficit}</span>
+            ) : (
+              <span className="text-[10px] text-green-600">OK</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded section: supplier + actions */}
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-neutral-100 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400 block mb-1">Supplier</label>
+              <select value={item.supplier_id ?? ''} onChange={(e) => updateSupplier(item.id, 'supplier_id', e.target.value)}
+                className="w-full bg-white border border-neutral-200 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-gold">
+                <option value="">--</option>
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-neutral-400 block mb-1">Backup</label>
+              <select value={item.backup_supplier_id ?? ''} onChange={(e) => updateSupplier(item.id, 'backup_supplier_id', e.target.value)}
+                className="w-full bg-white border border-neutral-200 text-sm rounded px-2 py-1.5 focus:outline-none focus:border-gold">
+                <option value="">--</option>
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={onEdit} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-ink transition">
+              <Pencil size={11} strokeWidth={1.5} /> Edit
+            </button>
+            <button onClick={onDelete} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-red-600 transition">
+              <Trash2 size={11} strokeWidth={1.5} /> Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier hint when collapsed */}
+      {!expanded && item.supplier && (
+        <div className="mt-1 text-[10px] text-neutral-400 truncate">{item.supplier.name}</div>
       )}
     </div>
   );
