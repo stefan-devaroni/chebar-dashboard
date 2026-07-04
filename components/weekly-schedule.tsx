@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Plus, X, UserPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, X, Sun, Moon } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -120,74 +120,25 @@ export function WeeklySchedule({
     }
   }
 
-  async function removeMember(id: string) {
-    setMembers((prev) => prev.filter((m) => m.id !== id));
-    setShifts((prev) => prev.filter((s) => s.team_member_id !== id));
-    await fetch('/api/team', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-  }
-
   const todayStr = new Date().toISOString().split('T')[0];
 
   const fohMembers = members.filter((m) => m.department !== 'kitchen');
   const kitchenMembers = members.filter((m) => m.department === 'kitchen');
 
-  function hasShift(memberId: string, date: string, type: 'morning' | 'evening') {
+  function isScheduled(memberId: string, date: string, type: 'morning' | 'evening') {
     return shifts.some(
       (s) => s.team_member_id === memberId && s.date === date && s.shift_type === type
     );
   }
 
-  function renderMemberRows(deptMembers: TeamMember[]) {
-    return deptMembers.map((member) => (
-      <div key={member.id} className="contents">
-        {/* Name cell */}
-        <div className="bg-white px-2 py-2 flex items-center min-w-0 border-b border-neutral-100 sticky left-0 z-10">
-          <span className="text-xs truncate">{member.name}</span>
-        </div>
-        {/* Day cells */}
-        {weekDates.map((date) => {
-          const am = hasShift(member.id, date, 'morning');
-          const pm = hasShift(member.id, date, 'evening');
-          const isToday = date === todayStr;
-          return (
-            <div
-              key={date}
-              className={cn(
-                'bg-white border-b border-neutral-100 px-0.5 py-1.5 flex flex-col items-center gap-0.5',
-                isToday && 'bg-gold/5'
-              )}
-            >
-              <button
-                onClick={() => toggleShift(member.id, date, 'morning')}
-                className={cn(
-                  'w-full text-[10px] py-1 rounded transition font-medium',
-                  am
-                    ? 'bg-blue-500 text-white'
-                    : 'text-neutral-300 hover:bg-neutral-100'
-                )}
-              >
-                AM
-              </button>
-              <button
-                onClick={() => toggleShift(member.id, date, 'evening')}
-                className={cn(
-                  'w-full text-[10px] py-1 rounded transition font-medium',
-                  pm
-                    ? 'bg-indigo-500 text-white'
-                    : 'text-neutral-300 hover:bg-neutral-100'
-                )}
-              >
-                PM
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    ));
+  function getScheduledMembers(date: string, type: 'morning' | 'evening', dept: 'foh' | 'kitchen') {
+    const deptMembers = dept === 'kitchen' ? kitchenMembers : fohMembers;
+    return deptMembers.filter((m) => isScheduled(m.id, date, type));
+  }
+
+  function getUnscheduledMembers(date: string, type: 'morning' | 'evening', dept: 'foh' | 'kitchen') {
+    const deptMembers = dept === 'kitchen' ? kitchenMembers : fohMembers;
+    return deptMembers.filter((m) => !isScheduled(m.id, date, type));
   }
 
   return (
@@ -243,86 +194,172 @@ export function WeeklySchedule({
         </div>
       ) : (
         <div className={cn('transition-opacity', loading && 'opacity-50')}>
-          {/* Schedule grid — scrollable on mobile */}
-          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-            <div className="min-w-[600px]">
-              {/* FOH section */}
-              {fohMembers.length > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                    <h3 className="text-xs uppercase tracking-widest text-neutral-500 font-medium">Front of House</h3>
-                  </div>
-                  <div className="border border-neutral-200 rounded-lg overflow-hidden">
-                    <div className="grid group/row" style={{ gridTemplateColumns: '120px repeat(7, 1fr)' }}>
-                      {/* Header */}
-                      <div className="bg-neutral-50 px-2 py-2 text-xs text-neutral-400 uppercase tracking-widest sticky left-0 z-10">Name</div>
-                      {weekDates.map((date, i) => {
-                        const d = new Date(date + 'T00:00:00');
-                        const isToday = date === todayStr;
-                        return (
-                          <div key={date} className={cn('bg-neutral-50 px-1 py-2 text-center', isToday && 'bg-gold/10')}>
-                            <p className="text-[10px] uppercase tracking-widest text-neutral-400">{DAYS[i]}</p>
-                            <p className={cn('text-sm font-display', isToday && 'text-gold')}>{d.getDate()}</p>
-                          </div>
-                        );
-                      })}
-                      {renderMemberRows(fohMembers)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Kitchen section */}
-              {kitchenMembers.length > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-                    <h3 className="text-xs uppercase tracking-widest text-neutral-500 font-medium">Kitchen</h3>
-                  </div>
-                  <div className="border border-neutral-200 rounded-lg overflow-hidden">
-                    <div className="grid group/row" style={{ gridTemplateColumns: '120px repeat(7, 1fr)' }}>
-                      {/* Header */}
-                      <div className="bg-neutral-50 px-2 py-2 text-xs text-neutral-400 uppercase tracking-widest sticky left-0 z-10">Name</div>
-                      {weekDates.map((date, i) => {
-                        const d = new Date(date + 'T00:00:00');
-                        const isToday = date === todayStr;
-                        return (
-                          <div key={date} className={cn('bg-neutral-50 px-1 py-2 text-center', isToday && 'bg-gold/10')}>
-                            <p className="text-[10px] uppercase tracking-widest text-neutral-400">{DAYS[i]}</p>
-                            <p className={cn('text-sm font-display', isToday && 'text-gold')}>{d.getDate()}</p>
-                          </div>
-                        );
-                      })}
-                      {renderMemberRows(kitchenMembers)}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Daily summary */}
-          <div className="mt-4 grid grid-cols-7 gap-1">
+          {/* Day cards — horizontal scroll on mobile, grid on desktop */}
+          <div className="flex gap-2 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-7 pb-2 snap-x snap-mandatory">
             {weekDates.map((date, i) => {
-              const dayShifts = shifts.filter((s) => s.date === date);
-              const amCount = dayShifts.filter((s) => s.shift_type === 'morning').length;
-              const pmCount = dayShifts.filter((s) => s.shift_type === 'evening').length;
+              const d = new Date(date + 'T00:00:00');
+              const isToday = date === todayStr;
+              const amFoh = getScheduledMembers(date, 'morning', 'foh');
+              const amKitchen = getScheduledMembers(date, 'morning', 'kitchen');
+              const pmFoh = getScheduledMembers(date, 'evening', 'foh');
+              const pmKitchen = getScheduledMembers(date, 'evening', 'kitchen');
+              const unschedAMFoh = getUnscheduledMembers(date, 'morning', 'foh');
+              const unschedAMKitchen = getUnscheduledMembers(date, 'morning', 'kitchen');
+              const unschedPMFoh = getUnscheduledMembers(date, 'evening', 'foh');
+              const unschedPMKitchen = getUnscheduledMembers(date, 'evening', 'kitchen');
+
               return (
-                <div key={date} className="text-center">
-                  <p className="text-[10px] text-neutral-400">{DAYS[i]}</p>
-                  <p className="text-xs">
-                    <span className="text-blue-600">{amCount}</span>
-                    <span className="text-neutral-300"> / </span>
-                    <span className="text-indigo-600">{pmCount}</span>
-                  </p>
+                <div
+                  key={date}
+                  className={cn(
+                    'min-w-[260px] sm:min-w-0 snap-start rounded-xl border flex flex-col',
+                    isToday
+                      ? 'border-gold/60 bg-gold/5 ring-1 ring-gold/20'
+                      : 'border-neutral-200 bg-white'
+                  )}
+                >
+                  {/* Day header */}
+                  <div className={cn(
+                    'px-3 py-2.5 text-center border-b',
+                    isToday ? 'border-gold/20' : 'border-neutral-100'
+                  )}>
+                    <p className="text-[10px] uppercase tracking-widest text-neutral-400">{DAYS[i]}</p>
+                    <p className={cn(
+                      'text-lg font-display',
+                      isToday ? 'text-gold' : 'text-ink'
+                    )}>
+                      {d.getDate()}
+                    </p>
+                  </div>
+
+                  {/* AM section */}
+                  <div className="px-2.5 pt-2.5 pb-2">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Sun size={11} className="text-amber-500" />
+                      <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">AM</span>
+                      <span className="text-[10px] text-neutral-300 ml-auto">{amFoh.length + amKitchen.length}</span>
+                    </div>
+
+                    {/* Scheduled staff */}
+                    <div className="flex flex-wrap gap-1 mb-1">
+                      {amFoh.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'morning')}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                      {amKitchen.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'morning')}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Unscheduled staff — dimmed, tap to add */}
+                    <div className="flex flex-wrap gap-1">
+                      {unschedAMFoh.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'morning')}
+                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-blue-200 text-blue-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                      {unschedAMKitchen.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'morning')}
+                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-orange-200 text-orange-300 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="mx-2.5 border-t border-dashed border-neutral-200" />
+
+                  {/* PM section */}
+                  <div className="px-2.5 pt-2 pb-2.5">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Moon size={11} className="text-indigo-400" />
+                      <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">PM</span>
+                      <span className="text-[10px] text-neutral-300 ml-auto">{pmFoh.length + pmKitchen.length}</span>
+                    </div>
+
+                    {/* Scheduled staff */}
+                    <div className="flex flex-wrap gap-1 mb-1">
+                      {pmFoh.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'evening')}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                      {pmKitchen.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'evening')}
+                          className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Unscheduled staff — dimmed, tap to add */}
+                    <div className="flex flex-wrap gap-1">
+                      {unschedPMFoh.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'evening')}
+                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-blue-200 text-blue-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                      {unschedPMKitchen.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => toggleShift(m.id, date, 'evening')}
+                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-orange-200 text-orange-300 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition"
+                        >
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               );
             })}
           </div>
-          <p className="text-[10px] text-neutral-400 text-center mt-1">
-            <span className="text-blue-600">AM</span> / <span className="text-indigo-600">PM</span> staff per day
-          </p>
+
+          {/* Legend */}
+          <div className="flex items-center justify-center gap-6 mt-4 text-[10px] text-neutral-400">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-blue-500" />
+              <span className="uppercase tracking-widest">FOH</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-orange-500" />
+              <span className="uppercase tracking-widest">Kitchen</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-3 rounded-full border border-dashed border-neutral-300" />
+              <span className="uppercase tracking-widest">Tap to add</span>
+            </div>
+          </div>
         </div>
       )}
 
