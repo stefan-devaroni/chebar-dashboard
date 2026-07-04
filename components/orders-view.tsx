@@ -1,0 +1,258 @@
+'use client';
+
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { Truck, FileText, Check, Clock, Package, ChevronDown, ChevronRight } from 'lucide-react';
+
+interface OrderItem {
+  name: string;
+  unit: string;
+  unit_size: string | null;
+  toBuy: number;
+  supplier_name: string;
+  supplier_id: string | null;
+}
+
+interface PurchaseOrder {
+  id: string;
+  created_at: string;
+  status: 'draft' | 'sent' | 'received';
+  notes: string | null;
+  items: OrderItem[];
+}
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  draft: { label: 'Draft', color: 'bg-amber-100 text-amber-800' },
+  sent: { label: 'Sent', color: 'bg-blue-100 text-blue-800' },
+  received: { label: 'Received', color: 'bg-green-100 text-green-800' },
+};
+
+export function OrdersView({
+  initialOrders,
+  suppliers,
+}: {
+  initialOrders: PurchaseOrder[];
+  suppliers: { id: string; name: string }[];
+}) {
+  const [orders, setOrders] = useState<PurchaseOrder[]>(initialOrders);
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(
+    initialOrders.length > 0 ? initialOrders[0].id : null
+  );
+
+  async function updateStatus(orderId: string, status: string) {
+    const res = await fetch('/api/orders', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: orderId, status }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+    }
+  }
+
+  function groupBySupplier(items: OrderItem[]) {
+    const map: Record<string, { supplierName: string; items: OrderItem[] }> = {};
+    for (const item of items) {
+      const key = item.supplier_id ?? '__none__';
+      if (!map[key]) {
+        map[key] = { supplierName: item.supplier_name || 'No supplier assigned', items: [] };
+      }
+      map[key].items.push(item);
+    }
+    return Object.entries(map).sort(([a], [b]) => {
+      if (a === '__none__') return 1;
+      if (b === '__none__') return -1;
+      return map[a].supplierName.localeCompare(map[b].supplierName);
+    });
+  }
+
+  function copyOrder(order: PurchaseOrder) {
+    const date = new Date(order.created_at).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+    const grouped = groupBySupplier(order.items);
+    let text = `Che Bar — Purchase Order — ${date}\n`;
+    text += '═'.repeat(40) + '\n\n';
+    for (const [, { supplierName, items }] of grouped) {
+      text += `▸ ${supplierName}\n`;
+      text += '─'.repeat(40) + '\n';
+      for (const item of items) {
+        text += `  ${item.toBuy} ${item.unit}  ${item.name}`;
+        if (item.unit_size) text += ` (${item.unit_size})`;
+        text += '\n';
+      }
+      text += '\n';
+    }
+    navigator.clipboard.writeText(text);
+  }
+
+  function copySupplierSection(supplierName: string, items: OrderItem[], orderDate: string) {
+    const date = new Date(orderDate).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+    let text = `Order for ${supplierName} — ${date}\n`;
+    text += '─'.repeat(40) + '\n';
+    for (const item of items) {
+      text += `${item.toBuy} ${item.unit}  ${item.name}`;
+      if (item.unit_size) text += ` (${item.unit_size})`;
+      text += '\n';
+    }
+    navigator.clipboard.writeText(text);
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="bg-white border border-neutral-200 rounded p-10 text-center">
+        <Package size={32} className="mx-auto text-neutral-300 mb-3" />
+        <p className="text-sm text-neutral-500">No orders yet.</p>
+        <p className="text-xs text-neutral-400 mt-1">
+          Go to Purchasing and click &ldquo;Generate Order&rdquo; to create one.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {orders.map((order) => {
+        const isExpanded = expandedOrder === order.id;
+        const grouped = groupBySupplier(order.items);
+        const date = new Date(order.created_at);
+        const statusInfo = STATUS_LABELS[order.status] ?? STATUS_LABELS.draft;
+        const totalItems = order.items.length;
+        const supplierCount = grouped.length;
+
+        return (
+          <div key={order.id} className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
+            {/* Order header */}
+            <button
+              onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+              className="w-full flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-4 text-left hover:bg-neutral-50 transition"
+            >
+              {isExpanded
+                ? <ChevronDown size={16} className="text-neutral-400 shrink-0" />
+                : <ChevronRight size={16} className="text-neutral-400 shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-sm">
+                    {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                  <span className="text-xs text-neutral-400">
+                    {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                  <span className={cn('text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium', statusInfo.color)}>
+                    {statusInfo.label}
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {totalItems} items from {supplierCount} supplier{supplierCount !== 1 ? 's' : ''}
+                </p>
+              </div>
+            </button>
+
+            {/* Expanded order body */}
+            {isExpanded && (
+              <div className="border-t border-neutral-100 px-4 py-4 sm:px-5 space-y-5">
+                {/* Status + actions */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => copyOrder(order)}
+                    className="flex items-center gap-1.5 bg-ink text-cream px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition"
+                  >
+                    <FileText size={12} strokeWidth={2} />
+                    Copy all
+                  </button>
+                  {order.status === 'draft' && (
+                    <button
+                      onClick={() => updateStatus(order.id, 'sent')}
+                      className="flex items-center gap-1.5 border border-blue-300 text-blue-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-blue-50 transition"
+                    >
+                      <Check size={12} strokeWidth={2} />
+                      Mark sent
+                    </button>
+                  )}
+                  {order.status === 'sent' && (
+                    <button
+                      onClick={() => updateStatus(order.id, 'received')}
+                      className="flex items-center gap-1.5 border border-green-300 text-green-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-green-50 transition"
+                    >
+                      <Check size={12} strokeWidth={2} />
+                      Mark received
+                    </button>
+                  )}
+                  {order.status !== 'draft' && (
+                    <button
+                      onClick={() => updateStatus(order.id, 'draft')}
+                      className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-50 transition"
+                    >
+                      <Clock size={12} strokeWidth={2} />
+                      Back to draft
+                    </button>
+                  )}
+                </div>
+
+                {/* Supplier groups */}
+                {grouped.map(([supplierId, { supplierName, items }]) => (
+                  <div key={supplierId}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Truck size={14} className="text-neutral-400" />
+                        <h3 className="font-medium text-sm">{supplierName}</h3>
+                        <span className="text-xs text-neutral-400">({items.length})</span>
+                      </div>
+                      <button
+                        onClick={() => copySupplierSection(supplierName, items, order.created_at)}
+                        className="text-xs text-gold hover:text-gold/80 uppercase tracking-widest transition"
+                      >
+                        Copy list
+                      </button>
+                    </div>
+                    <div className="bg-cream border border-neutral-200 rounded overflow-hidden">
+                      {/* Desktop table */}
+                      <table className="w-full text-sm hidden sm:table">
+                        <thead>
+                          <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-400">
+                            <th className="text-left px-4 py-2 font-normal">Item</th>
+                            <th className="text-center px-3 py-2 font-normal w-16">Qty</th>
+                            <th className="text-left px-3 py-2 font-normal w-20">Unit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((item, idx) => (
+                            <tr key={idx} className="border-b border-neutral-50 last:border-b-0">
+                              <td className="px-4 py-2">
+                                {item.name}
+                                {item.unit_size && <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>}
+                              </td>
+                              <td className="px-3 py-2 text-center font-bold text-red-700">{item.toBuy}</td>
+                              <td className="px-3 py-2 text-neutral-500">{item.unit}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {/* Mobile list */}
+                      <div className="sm:hidden divide-y divide-neutral-100">
+                        {items.map((item, idx) => (
+                          <div key={idx} className="px-3 py-2 flex items-center justify-between">
+                            <div className="min-w-0">
+                              <span className="text-sm block truncate">{item.name}</span>
+                              {item.unit_size && <span className="text-xs text-neutral-400">{item.unit_size}</span>}
+                            </div>
+                            <span className="font-bold text-red-700 text-sm shrink-0 ml-2">
+                              {item.toBuy} {item.unit}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

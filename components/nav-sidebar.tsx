@@ -4,12 +4,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, CalendarDays, ShoppingCart, Megaphone, Menu, X } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ShoppingCart, ClipboardList, Megaphone, Menu, X } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart },
+  { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList },
   { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
 ];
 

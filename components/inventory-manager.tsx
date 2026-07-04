@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Plus, Minus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText } from 'lucide-react';
 
@@ -25,7 +26,16 @@ interface InventoryItem {
   backup_supplier: { id: string; name: string } | null;
   supplier_id: string | null;
   backup_supplier_id: string | null;
+  station: 'bar' | 'kitchen' | 'both';
+  last_counted_at: string | null;
   notes: string | null;
+}
+
+function isCountedToday(item: InventoryItem): boolean {
+  if (!item.last_counted_at) return false;
+  const counted = new Date(item.last_counted_at);
+  const now = new Date();
+  return counted.toDateString() === now.toDateString();
 }
 
 const CATEGORIES: Record<string, string> = {
@@ -52,14 +62,16 @@ export function InventoryManager({
   initialItems: InventoryItem[];
   initialSuppliers: Supplier[];
 }) {
+  const router = useRouter();
   const [items, setItems] = useState<InventoryItem[]>(initialItems);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [stationFilter, setStationFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
-  const [showOrderSheet, setShowOrderSheet] = useState(false);
+  const [generatingOrder, setGeneratingOrder] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
@@ -72,6 +84,9 @@ export function InventoryManager({
     if (categoryFilter !== 'all') {
       result = result.filter((i) => i.category === categoryFilter);
     }
+    if (stationFilter !== 'all') {
+      result = result.filter((i) => i.station === stationFilter || i.station === 'both');
+    }
     if (viewMode === 'order') {
       result = result.filter((i) => i.par_stock > 0 && i.current_stock < i.par_stock);
     }
@@ -79,7 +94,7 @@ export function InventoryManager({
       result = result.filter((i) => i.par_stock > 0 && i.current_stock <= i.par_stock * 0.5);
     }
     return result;
-  }, [items, search, categoryFilter, viewMode]);
+  }, [items, search, categoryFilter, stationFilter, viewMode]);
 
   const grouped = useMemo(() => {
     const map: Record<string, InventoryItem[]> = {};
@@ -165,6 +180,27 @@ export function InventoryManager({
     setEditingItem(null);
   }
 
+  async function generateOrder() {
+    setGeneratingOrder(true);
+    const orderItems = needsOrder.map((item) => ({
+      name: item.name,
+      unit: item.unit,
+      unit_size: item.unit_size,
+      toBuy: Math.max(0, item.par_stock - item.current_stock),
+      supplier_name: item.supplier?.name ?? 'No supplier assigned',
+      supplier_id: item.supplier_id,
+    }));
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: orderItems }),
+    });
+    if (res.ok) {
+      router.push('/dashboard/orders');
+    }
+    setGeneratingOrder(false);
+  }
+
   async function handleSaveSupplier(data: any) {
     const res = await fetch('/api/suppliers', {
       method: 'POST',
@@ -178,31 +214,58 @@ export function InventoryManager({
     setShowAddSupplier(false);
   }
 
+  const countedToday = items.filter(isCountedToday).length;
+
   return (
     <div>
       {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-white border border-neutral-200 rounded p-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="bg-white border border-neutral-200 rounded p-3 sm:p-4">
           <div className="flex items-center gap-2 text-neutral-500 mb-1">
             <Package size={14} strokeWidth={1.5} />
             <span className="text-xs uppercase tracking-widest">Items</span>
           </div>
           <span className="font-display text-2xl">{items.length}</span>
         </div>
-        <div className={cn('border rounded p-4', needsOrder.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-neutral-200')}>
+        <div className={cn('border rounded p-3 sm:p-4', needsOrder.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-neutral-200')}>
           <div className="flex items-center gap-2 text-neutral-500 mb-1">
             <ShoppingCart size={14} strokeWidth={1.5} />
             <span className="text-xs uppercase tracking-widest">To order</span>
           </div>
           <span className="font-display text-2xl">{needsOrder.length}</span>
         </div>
-        <div className="bg-white border border-neutral-200 rounded p-4">
+        <div className={cn('border rounded p-3 sm:p-4', countedToday > 0 ? 'bg-teal-50 border-teal-200' : 'bg-white border-neutral-200')}>
+          <div className="flex items-center gap-2 text-neutral-500 mb-1">
+            <ClipboardList size={14} strokeWidth={1.5} />
+            <span className="text-xs uppercase tracking-widest">Counted</span>
+          </div>
+          <span className="font-display text-2xl">{countedToday}<span className="text-sm text-neutral-400 font-sans">/{items.length}</span></span>
+        </div>
+        <div className="bg-white border border-neutral-200 rounded p-3 sm:p-4">
           <div className="flex items-center gap-2 text-neutral-500 mb-1">
             <Truck size={14} strokeWidth={1.5} />
             <span className="text-xs uppercase tracking-widest">Suppliers</span>
           </div>
           <span className="font-display text-2xl">{suppliers.length}</span>
         </div>
+      </div>
+
+      {/* Station filter — quick pick for walk-throughs */}
+      <div className="flex gap-2 mb-4">
+        {([['all', 'All items'], ['bar', 'Bar'], ['kitchen', 'Kitchen']] as const).map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setStationFilter(k)}
+            className={cn(
+              'px-4 py-2 rounded-lg text-sm font-medium transition',
+              stationFilter === k
+                ? 'bg-ink text-cream'
+                : 'bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-400'
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Toolbar */}
@@ -247,11 +310,12 @@ export function InventoryManager({
       <div className="flex flex-wrap gap-2 mb-6">
         {needsOrder.length > 0 && (
           <button
-            onClick={() => setShowOrderSheet(true)}
-            className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-red-700 transition"
+            onClick={generateOrder}
+            disabled={generatingOrder}
+            className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-red-700 transition disabled:opacity-50"
           >
             <ClipboardList size={14} strokeWidth={2} />
-            Generate order ({needsOrder.length} items)
+            {generatingOrder ? 'Saving...' : `Generate order (${needsOrder.length} items)`}
           </button>
         )}
         <button
@@ -376,14 +440,7 @@ export function InventoryManager({
         />
       )}
 
-      {/* Order sheet modal — grouped by supplier */}
-      {showOrderSheet && (
-        <OrderSheetModal
-          items={needsOrder}
-          suppliers={suppliers}
-          onClose={() => setShowOrderSheet(false)}
-        />
-      )}
+      {/* Order sheet removed — orders now saved to the Orders page */}
     </div>
   );
 }
@@ -401,12 +458,14 @@ function DesktopRow({
   const deficit = Math.max(0, item.par_stock - item.current_stock);
   const isLow = item.par_stock > 0 && item.current_stock < item.par_stock;
   const isCritical = item.par_stock > 0 && item.current_stock <= item.par_stock * 0.5;
+  const counted = isCountedToday(item);
 
   return (
     <tr className={cn(
       'border-b border-neutral-50 last:border-b-0 group',
-      isCritical && 'bg-red-50/50',
-      isLow && !isCritical && 'bg-amber-50/50'
+      counted ? 'bg-teal-50/50' :
+      isCritical ? 'bg-red-50/50' :
+      isLow ? 'bg-amber-50/50' : ''
     )}>
       <td className="px-4 py-2">
         <span className="font-medium">{item.name}</span>
@@ -475,14 +534,16 @@ function MobileCard({
   const deficit = Math.max(0, item.par_stock - item.current_stock);
   const isLow = item.par_stock > 0 && item.current_stock < item.par_stock;
   const isCritical = item.par_stock > 0 && item.current_stock <= item.par_stock * 0.5;
+  const counted = isCountedToday(item);
   const [expanded, setExpanded] = useState(false);
 
   return (
     <div className={cn(
-      'bg-white border rounded px-2 py-2.5',
-      isCritical ? 'border-red-200 bg-red-50/30' :
-      isLow ? 'border-amber-200 bg-amber-50/30' :
-      'border-neutral-200'
+      'border rounded px-2 py-2.5',
+      counted ? 'bg-teal-50/50 border-teal-200' :
+      isCritical ? 'bg-red-50/30 border-red-200' :
+      isLow ? 'bg-amber-50/30 border-amber-200' :
+      'bg-white border-neutral-200'
     )}>
       {/* Row 1: name + par/buy */}
       <div className="flex items-center justify-between gap-2">
@@ -732,6 +793,7 @@ function ItemModal({
   const [currentStock, setCurrentStock] = useState(item?.current_stock ?? 0);
   const [supplierId, setSupplierId] = useState(item?.supplier_id ?? '');
   const [backupSupplierId, setBackupSupplierId] = useState(item?.backup_supplier_id ?? '');
+  const [station, setStation] = useState(item?.station ?? 'both');
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -747,6 +809,7 @@ function ItemModal({
       current_stock: currentStock,
       supplier_id: supplierId || null,
       backup_supplier_id: backupSupplierId || null,
+      station,
     });
     setSaving(false);
   }
@@ -831,6 +894,18 @@ function ItemModal({
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Station</label>
+            <div className="flex gap-2">
+              {([['both', 'Both'], ['bar', 'Bar'], ['kitchen', 'Kitchen']] as const).map(([k, label]) => (
+                <button key={k} type="button" onClick={() => setStation(k)}
+                  className={cn('flex-1 py-2 rounded text-xs uppercase tracking-widest transition',
+                    station === k ? 'bg-ink text-cream' : 'bg-white border border-neutral-200 text-neutral-600 hover:border-neutral-400'
+                  )}>{label}</button>
+              ))}
             </div>
           </div>
 

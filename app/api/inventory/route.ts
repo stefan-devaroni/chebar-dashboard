@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       current_stock: body.current_stock || 0,
       supplier_id: body.supplier_id || null,
       backup_supplier_id: body.backup_supplier_id || null,
+      station: body.station || 'both',
       notes: body.notes || null,
     })
     .select('*, supplier:suppliers!inventory_items_supplier_id_fkey(id, name), backup_supplier:suppliers!inventory_items_backup_supplier_id_fkey(id, name)')
@@ -48,15 +49,37 @@ export async function PUT(request: NextRequest) {
   const supabase = createClient();
   const body = await request.json();
 
+  // Get current item to log changes
+  if (body.current_stock !== undefined) {
+    const { data: current } = await supabase
+      .from('inventory_items')
+      .select('current_stock')
+      .eq('id', body.id)
+      .single();
+
+    if (current && current.current_stock !== body.current_stock) {
+      await supabase.from('stock_changes').insert({
+        item_id: body.id,
+        field: 'current_stock',
+        old_value: current.current_stock,
+        new_value: body.current_stock,
+      });
+    }
+  }
+
   const update: any = {};
   if (body.name !== undefined) update.name = body.name;
   if (body.category !== undefined) update.category = body.category;
   if (body.unit !== undefined) update.unit = body.unit;
   if (body.unit_size !== undefined) update.unit_size = body.unit_size || null;
   if (body.par_stock !== undefined) update.par_stock = body.par_stock;
-  if (body.current_stock !== undefined) update.current_stock = body.current_stock;
+  if (body.current_stock !== undefined) {
+    update.current_stock = body.current_stock;
+    update.last_counted_at = new Date().toISOString();
+  }
   if (body.supplier_id !== undefined) update.supplier_id = body.supplier_id || null;
   if (body.backup_supplier_id !== undefined) update.backup_supplier_id = body.backup_supplier_id || null;
+  if (body.station !== undefined) update.station = body.station;
   if (body.notes !== undefined) update.notes = body.notes || null;
   if (body.active !== undefined) update.active = body.active;
 
