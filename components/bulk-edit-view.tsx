@@ -1,9 +1,44 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { ArrowLeft, Search, Check, ChevronDown } from 'lucide-react';
+
+function EditableCell({ value, field, itemId, onSave, type = 'text', className }: {
+  value: string | number;
+  field: string;
+  itemId: string;
+  onSave: (id: string, field: string, value: string | null) => void;
+  type?: 'text' | 'number';
+  className?: string;
+}) {
+  const [local, setLocal] = useState(String(value ?? ''));
+  const ref = useRef<HTMLInputElement>(null);
+
+  function handleBlur() {
+    const trimmed = local.trim();
+    const original = String(value ?? '');
+    if (trimmed !== original) {
+      onSave(itemId, field, type === 'number' ? trimmed : trimmed || null);
+    }
+  }
+
+  return (
+    <input
+      ref={ref}
+      type={type}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={(e) => { if (e.key === 'Enter') ref.current?.blur(); }}
+      className={cn(
+        'border border-transparent hover:border-neutral-200 focus:border-gold rounded px-1.5 py-1 text-sm bg-transparent focus:bg-white focus:outline-none transition w-full',
+        className
+      )}
+    />
+  );
+}
 
 interface Item {
   id: string;
@@ -81,10 +116,14 @@ export function BulkEditView({ items: initialItems, suppliers }: { items: Item[]
 
   async function updateItem(id: string, field: string, value: string | null) {
     setSaving((prev) => new Set(prev).add(id));
+    let sendValue: any = value;
+    if (field === 'par_stock' || field === 'current_stock') {
+      sendValue = Number(value) || 0;
+    }
     const res = await fetch('/api/inventory', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, [field]: value }),
+      body: JSON.stringify({ id, [field]: sendValue }),
     });
     if (res.ok) {
       const updated = await res.json();
@@ -161,12 +200,14 @@ export function BulkEditView({ items: initialItems, suppliers }: { items: Item[]
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-400">
-                    <th className="text-left px-4 py-2.5 font-normal w-[30%]">Item</th>
-                    <th className="text-center px-2 py-2.5 font-normal w-[6%]">Par</th>
+                    <th className="text-left px-4 py-2.5 font-normal w-[22%]">Item</th>
+                    <th className="text-left px-2 py-2.5 font-normal w-[8%]">Unit</th>
+                    <th className="text-left px-2 py-2.5 font-normal w-[8%]">Size</th>
+                    <th className="text-center px-2 py-2.5 font-normal w-[5%]">Par</th>
                     <th className="text-center px-2 py-2.5 font-normal w-[7%]">Station</th>
-                    <th className="text-left px-2 py-2.5 font-normal w-[25%]">Supplier</th>
-                    <th className="text-left px-2 py-2.5 font-normal w-[25%]">Backup Supplier</th>
-                    <th className="w-[7%] px-2 py-2.5"></th>
+                    <th className="text-left px-2 py-2.5 font-normal w-[20%]">Supplier</th>
+                    <th className="text-left px-2 py-2.5 font-normal w-[20%]">Backup</th>
+                    <th className="w-[5%] px-2 py-2.5"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,11 +217,18 @@ export function BulkEditView({ items: initialItems, suppliers }: { items: Item[]
                       saved.has(item.id) && 'bg-teal-50/50',
                       !item.supplier_id && 'bg-red-50/30',
                     )}>
-                      <td className="px-4 py-2">
-                        <span className="font-medium">{item.name}</span>
-                        <span className="text-neutral-400 ml-1.5 text-xs">{item.unit}{item.unit_size ? ` (${item.unit_size})` : ''}</span>
+                      <td className="px-3 py-1">
+                        <EditableCell value={item.name} field="name" itemId={item.id} onSave={updateItem} className="font-medium" />
                       </td>
-                      <td className="px-2 py-2 text-center">{item.par_stock}</td>
+                      <td className="px-1 py-1">
+                        <EditableCell value={item.unit} field="unit" itemId={item.id} onSave={updateItem} className="text-neutral-500 text-xs" />
+                      </td>
+                      <td className="px-1 py-1">
+                        <EditableCell value={item.unit_size ?? ''} field="unit_size" itemId={item.id} onSave={updateItem} className="text-neutral-500 text-xs" />
+                      </td>
+                      <td className="px-1 py-1">
+                        <EditableCell value={item.par_stock} field="par_stock" itemId={item.id} onSave={updateItem} type="number" className="text-center w-16" />
+                      </td>
                       <td className="px-2 py-2 text-center">
                         <select
                           value={item.station}
@@ -248,24 +296,40 @@ export function BulkEditView({ items: initialItems, suppliers }: { items: Item[]
                     saved.has(item.id) ? 'border-teal-300 bg-teal-50/50' : !item.supplier_id ? 'border-red-200 bg-red-50/20' : 'border-neutral-200',
                   )}
                 >
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div>
-                      <span className="font-medium text-sm">{item.name}</span>
-                      <span className="text-neutral-400 text-xs ml-1.5">{item.unit}</span>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex-1 mr-2">
+                      <EditableCell value={item.name} field="name" itemId={item.id} onSave={updateItem} className="font-medium" />
                     </div>
                     <div className="flex items-center gap-2">
-                      {saving.has(item.id) && <span className="text-xs text-neutral-400">Saving...</span>}
+                      {saving.has(item.id) && <span className="text-xs text-neutral-400">...</span>}
                       {saved.has(item.id) && <Check size={14} className="text-teal-600" />}
-                      <select
-                        value={item.station}
-                        onChange={(e) => updateItem(item.id, 'station', e.target.value)}
-                        className="appearance-none text-xs border border-neutral-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-gold/50"
-                      >
-                        {STATIONS.map((s) => (
-                          <option key={s.value} value={s.value}>{s.label}</option>
-                        ))}
-                      </select>
                     </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-neutral-400 block mb-0.5">Unit</label>
+                      <EditableCell value={item.unit} field="unit" itemId={item.id} onSave={updateItem} className="text-xs border-neutral-200 !border" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-neutral-400 block mb-0.5">Size</label>
+                      <EditableCell value={item.unit_size ?? ''} field="unit_size" itemId={item.id} onSave={updateItem} className="text-xs border-neutral-200 !border" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-neutral-400 block mb-0.5">Par</label>
+                      <EditableCell value={item.par_stock} field="par_stock" itemId={item.id} onSave={updateItem} type="number" className="text-xs border-neutral-200 !border" />
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <label className="text-[10px] uppercase tracking-widest text-neutral-400 block mb-0.5">Station</label>
+                    <select
+                      value={item.station}
+                      onChange={(e) => updateItem(item.id, 'station', e.target.value)}
+                      className="appearance-none w-full text-sm border border-neutral-200 rounded px-2.5 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-gold/50"
+                    >
+                      {STATIONS.map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <div>
