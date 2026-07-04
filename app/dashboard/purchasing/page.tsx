@@ -20,11 +20,8 @@ export default async function PurchasingPage() {
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-6">
         <h1 className="font-display text-3xl">Purchasing</h1>
-        <p className="text-sm text-neutral-500 mt-1">
-          Inventory, par levels, and ordering. Walk the kitchen, update stock, see what to order.
-        </p>
       </header>
       <InventoryManager
         initialItems={items ?? []}

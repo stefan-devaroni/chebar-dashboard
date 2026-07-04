@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Plus, Minus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText, Download, Upload } from 'lucide-react';
+import { Plus, Minus, X, Search, ChevronDown, ChevronRight, Truck, Trash2, ClipboardList } from 'lucide-react';
 
 interface Supplier {
   id: string;
@@ -31,13 +31,6 @@ interface InventoryItem {
   notes: string | null;
 }
 
-function isCountedToday(item: InventoryItem): boolean {
-  if (!item.last_counted_at) return false;
-  const counted = new Date(item.last_counted_at);
-  const now = new Date();
-  return counted.toDateString() === now.toDateString();
-}
-
 const CATEGORIES: Record<string, string> = {
   'produce': 'Produce',
   'dairy': 'Dairy & Cheese',
@@ -53,8 +46,6 @@ const CATEGORIES: Record<string, string> = {
   'other': 'Other',
 };
 
-type ViewMode = 'all' | 'order' | 'low';
-
 export function InventoryManager({
   initialItems,
   initialSuppliers,
@@ -68,13 +59,11 @@ export function InventoryManager({
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [stationFilter, setStationFilter] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [generatingOrder, setGeneratingOrder] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: number; errors: string[] } | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [buyQtys, setBuyQtys] = useState<Record<string, number>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
@@ -89,14 +78,8 @@ export function InventoryManager({
     if (stationFilter !== 'all') {
       result = result.filter((i) => i.station === stationFilter || i.station === 'both');
     }
-    if (viewMode === 'order') {
-      result = result.filter((i) => i.par_stock > 0 && i.current_stock < i.par_stock);
-    }
-    if (viewMode === 'low') {
-      result = result.filter((i) => i.par_stock > 0 && i.current_stock <= i.par_stock * 0.5);
-    }
     return result;
-  }, [items, search, categoryFilter, stationFilter, viewMode]);
+  }, [items, search, categoryFilter, stationFilter]);
 
   const grouped = useMemo(() => {
     const map: Record<string, InventoryItem[]> = {};
@@ -110,7 +93,7 @@ export function InventoryManager({
     });
   }, [filtered]);
 
-  const needsOrder = items.filter((i) => i.par_stock > 0 && i.current_stock < i.par_stock);
+  const totalToBuy = Object.values(buyQtys).filter((v) => v > 0).length;
 
   function toggleCategory(cat: string) {
     setCollapsedCategories((prev) => {
@@ -119,6 +102,18 @@ export function InventoryManager({
       return next;
     });
   }
+
+  const setBuyQty = useCallback((id: string, delta: number) => {
+    setBuyQtys((prev) => {
+      const current = prev[id] ?? 0;
+      const next = Math.max(0, current + delta);
+      return { ...prev, [id]: next };
+    });
+  }, []);
+
+  const setBuyQtyDirect = useCallback((id: string, value: number) => {
+    setBuyQtys((prev) => ({ ...prev, [id]: Math.max(0, value) }));
+  }, []);
 
   const updateField = useCallback(async (id: string, field: string, value: any) => {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
@@ -185,21 +180,25 @@ export function InventoryManager({
   }
 
   async function generateOrder() {
+    const orderItems = items
+      .filter((item) => (buyQtys[item.id] ?? 0) > 0)
+      .map((item) => ({
+        name: item.name,
+        unit: item.unit,
+        unit_size: item.unit_size,
+        toBuy: buyQtys[item.id],
+        supplier_name: item.supplier?.name ?? 'No supplier assigned',
+        supplier_id: item.supplier_id,
+      }));
+    if (orderItems.length === 0) return;
     setGeneratingOrder(true);
-    const orderItems = needsOrder.map((item) => ({
-      name: item.name,
-      unit: item.unit,
-      unit_size: item.unit_size,
-      toBuy: Math.max(0, item.par_stock - item.current_stock),
-      supplier_name: item.supplier?.name ?? 'No supplier assigned',
-      supplier_id: item.supplier_id,
-    }));
     const res = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: orderItems }),
     });
     if (res.ok) {
+      setBuyQtys({});
       router.push('/dashboard/orders');
     }
     setGeneratingOrder(false);
@@ -218,96 +217,25 @@ export function InventoryManager({
     setShowAddSupplier(false);
   }
 
-  async function handleImportCSV(file: File) {
-    setImporting(true);
-    setImportResult(null);
-    const text = await file.text();
-    const lines = text.split('\n').filter((l) => l.trim());
-    const rows: any[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cols = parseCSVLine(lines[i]);
-      if (cols.length < 9) continue;
-      rows.push({
-        id: cols[0].trim(),
-        supplier: cols[7].trim(),
-        backup_supplier: cols[8].trim(),
-        station: cols[6].trim(),
-      });
-    }
-    const res = await fetch('/api/inventory/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows }),
-    });
-    if (res.ok) {
-      const result = await res.json();
-      setImportResult(result);
-      const refreshRes = await fetch('/api/inventory');
-      if (refreshRes.ok) {
-        const data = await refreshRes.json();
-        setItems(data.items);
-      }
-    }
-    setImporting(false);
-  }
-
-  function parseCSVLine(line: string): string[] {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQuotes) {
-        if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
-        else if (ch === '"') { inQuotes = false; }
-        else { current += ch; }
-      } else {
-        if (ch === '"') { inQuotes = true; }
-        else if (ch === ',') { result.push(current); current = ''; }
-        else { current += ch; }
-      }
-    }
-    result.push(current);
-    return result;
-  }
-
-  const countedToday = items.filter(isCountedToday).length;
+  const generateOrderButton = (
+    <button
+      onClick={generateOrder}
+      disabled={generatingOrder || totalToBuy === 0}
+      className={cn(
+        'flex items-center justify-center gap-1.5 w-full sm:w-auto px-5 py-2.5 rounded text-sm uppercase tracking-widest transition disabled:opacity-40',
+        totalToBuy > 0
+          ? 'bg-red-600 text-white hover:bg-red-700'
+          : 'bg-neutral-200 text-neutral-500'
+      )}
+    >
+      <ClipboardList size={14} strokeWidth={2} />
+      {generatingOrder ? 'Saving...' : totalToBuy > 0 ? `Generate order (${totalToBuy} items)` : 'Generate order'}
+    </button>
+  );
 
   return (
     <div>
-      {/* Stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="bg-white border border-neutral-200 rounded p-3 sm:p-4">
-          <div className="flex items-center gap-2 text-neutral-500 mb-1">
-            <Package size={14} strokeWidth={1.5} />
-            <span className="text-xs uppercase tracking-widest">Items</span>
-          </div>
-          <span className="font-display text-2xl">{items.length}</span>
-        </div>
-        <div className={cn('border rounded p-3 sm:p-4', needsOrder.length > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-neutral-200')}>
-          <div className="flex items-center gap-2 text-neutral-500 mb-1">
-            <ShoppingCart size={14} strokeWidth={1.5} />
-            <span className="text-xs uppercase tracking-widest">To order</span>
-          </div>
-          <span className="font-display text-2xl">{needsOrder.length}</span>
-        </div>
-        <div className={cn('border rounded p-3 sm:p-4', countedToday > 0 ? 'bg-teal-50 border-teal-200' : 'bg-white border-neutral-200')}>
-          <div className="flex items-center gap-2 text-neutral-500 mb-1">
-            <ClipboardList size={14} strokeWidth={1.5} />
-            <span className="text-xs uppercase tracking-widest">Counted</span>
-          </div>
-          <span className="font-display text-2xl">{countedToday}<span className="text-sm text-neutral-400 font-sans">/{items.length}</span></span>
-        </div>
-        <div className="bg-white border border-neutral-200 rounded p-3 sm:p-4">
-          <div className="flex items-center gap-2 text-neutral-500 mb-1">
-            <Truck size={14} strokeWidth={1.5} />
-            <span className="text-xs uppercase tracking-widest">Suppliers</span>
-          </div>
-          <span className="font-display text-2xl">{suppliers.length}</span>
-        </div>
-      </div>
-
-      {/* Station filter — quick pick for walk-throughs */}
+      {/* Station filter */}
       <div className="flex gap-2 mb-4">
         {([['all', 'All items'], ['bar', 'Bar'], ['kitchen', 'Kitchen']] as const).map(([k, label]) => (
           <button
@@ -325,8 +253,8 @@ export function InventoryManager({
         ))}
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
+      {/* Search + category */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
         <div className="relative flex-1 min-w-[180px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
           <input
@@ -347,34 +275,11 @@ export function InventoryManager({
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
-        <div className="flex gap-1 text-xs">
-          {([['all', 'All'], ['order', 'To order'], ['low', 'Low']] as const).map(([k, label]) => (
-            <button
-              key={k}
-              onClick={() => setViewMode(k)}
-              className={cn(
-                'px-3 py-1.5 uppercase tracking-widest rounded transition',
-                viewMode === k ? 'bg-ink text-cream' : 'text-neutral-600 hover:bg-white'
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Top action bar */}
       <div className="flex flex-wrap gap-2 mb-6">
-        {needsOrder.length > 0 && (
-          <button
-            onClick={generateOrder}
-            disabled={generatingOrder}
-            className="flex items-center gap-1.5 bg-red-600 text-white px-4 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-red-700 transition disabled:opacity-50"
-          >
-            <ClipboardList size={14} strokeWidth={2} />
-            {generatingOrder ? 'Saving...' : `Generate order (${needsOrder.length} items)`}
-          </button>
-        )}
+        {generateOrderButton}
         <button
           onClick={() => setShowAddSupplier(true)}
           className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
@@ -391,15 +296,7 @@ export function InventoryManager({
         </button>
       </div>
 
-      {importResult && (
-        <div className={cn('rounded p-3 mb-4 text-sm', importResult.errors.length > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200')}>
-          <p className="font-medium">{importResult.updated} items updated{importResult.errors.length > 0 ? `, ${importResult.errors.length} errors:` : '.'}</p>
-          {importResult.errors.map((e, i) => <p key={i} className="text-xs text-amber-700 mt-1">{e}</p>)}
-          <button onClick={() => setImportResult(null)} className="text-xs underline mt-2">Dismiss</button>
-        </div>
-      )}
-
-      {/* Inventory table grouped by category */}
+      {/* Item list grouped by category */}
       {grouped.length === 0 ? (
         <div className="bg-white border border-neutral-200 rounded p-10 text-center">
           <p className="text-sm text-neutral-500">
@@ -412,7 +309,7 @@ export function InventoryManager({
         <div className="space-y-4">
           {grouped.map(([category, catItems]) => {
             const collapsed = collapsedCategories.has(category);
-            const catNeedsOrder = catItems.filter((i) => i.par_stock > 0 && i.current_stock < i.par_stock).length;
+            const catBuyCount = catItems.filter((i) => (buyQtys[i.id] ?? 0) > 0).length;
             return (
               <section key={category}>
                 <button
@@ -426,9 +323,9 @@ export function InventoryManager({
                     {CATEGORIES[category] ?? category}
                   </h3>
                   <span className="text-xs text-neutral-400">({catItems.length})</span>
-                  {catNeedsOrder > 0 && (
+                  {catBuyCount > 0 && (
                     <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
-                      {catNeedsOrder} to order
+                      {catBuyCount} to order
                     </span>
                   )}
                 </button>
@@ -441,11 +338,7 @@ export function InventoryManager({
                         <thead>
                           <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-500">
                             <th className="text-left px-3 py-2.5 font-normal">Item</th>
-                            <th className="text-left px-1 py-2.5 font-normal w-20">Unit</th>
-                            <th className="text-left px-1 py-2.5 font-normal w-24">Size</th>
-                            <th className="text-center px-1 py-2.5 font-normal w-16">Par</th>
-                            <th className="text-center px-2 py-2.5 font-normal w-20">Actual</th>
-                            <th className="text-center px-2 py-2.5 font-normal w-16">Buy</th>
+                            <th className="text-center px-2 py-2.5 font-normal w-32">Buy</th>
                             <th className="text-left px-2 py-2.5 font-normal w-36">Supplier</th>
                             <th className="text-left px-2 py-2.5 font-normal w-36">Backup</th>
                             <th className="px-2 py-2.5 w-8"></th>
@@ -457,6 +350,8 @@ export function InventoryManager({
                               key={item.id}
                               item={item}
                               suppliers={suppliers}
+                              buyQty={buyQtys[item.id] ?? 0}
+                              onBuyChange={setBuyQty}
                               updateField={updateField}
                               updateSupplier={updateSupplier}
                               onDelete={() => deleteItem(item.id)}
@@ -473,6 +368,8 @@ export function InventoryManager({
                           key={item.id}
                           item={item}
                           suppliers={suppliers}
+                          buyQty={buyQtys[item.id] ?? 0}
+                          onBuyChange={setBuyQty}
                           updateField={updateField}
                           updateSupplier={updateSupplier}
                           onDelete={() => deleteItem(item.id)}
@@ -486,6 +383,11 @@ export function InventoryManager({
           })}
         </div>
       )}
+
+      {/* Bottom generate order button */}
+      <div className="mt-6 flex justify-center">
+        {generateOrderButton}
+      </div>
 
       {/* Add/Edit item modal */}
       {showAddItem && (
@@ -504,8 +406,6 @@ export function InventoryManager({
           onSave={handleSaveSupplier}
         />
       )}
-
-      {/* Order sheet removed — orders now saved to the Orders page */}
     </div>
   );
 }
@@ -546,55 +446,38 @@ function InlineEdit({ value, field, itemId, onSave, type = 'text', className }: 
 }
 
 const DesktopRow = memo(function DesktopRow({
-  item, suppliers, updateField, updateSupplier, onDelete,
+  item, suppliers, buyQty, onBuyChange, updateField, updateSupplier, onDelete,
 }: {
   item: InventoryItem;
   suppliers: Supplier[];
+  buyQty: number;
+  onBuyChange: (id: string, delta: number) => void;
   updateField: (id: string, field: string, value: any) => void;
   updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
   onDelete: () => void;
 }) {
-  const deficit = Math.max(0, item.par_stock - item.current_stock);
-  const isLow = item.par_stock > 0 && item.current_stock < item.par_stock;
-  const isCritical = item.par_stock > 0 && item.current_stock <= item.par_stock * 0.5;
-  const counted = isCountedToday(item);
-
   return (
     <tr className={cn(
       'border-b border-neutral-50 last:border-b-0 group',
-      counted ? 'bg-teal-50/50' :
-      isCritical ? 'bg-red-50/50' :
-      isLow ? 'bg-amber-50/50' : ''
+      buyQty > 0 ? 'bg-red-50/40' : ''
     )}>
       <td className="px-3 py-1">
         <InlineEdit value={item.name} field="name" itemId={item.id} onSave={updateField} className="font-medium text-sm w-full" />
       </td>
-      <td className="px-1 py-1">
-        <InlineEdit value={item.unit} field="unit" itemId={item.id} onSave={updateField} className="text-xs text-neutral-500 w-full" />
-      </td>
-      <td className="px-1 py-1">
-        <InlineEdit value={item.unit_size ?? ''} field="unit_size" itemId={item.id} onSave={updateField} className="text-xs text-neutral-500 w-full" />
-      </td>
-      <td className="px-1 py-1">
-        <InlineEdit value={item.par_stock} field="par_stock" itemId={item.id} onSave={updateField} type="number" className="text-sm text-center w-14" />
-      </td>
       <td className="px-2 py-2 text-center">
         <div className="inline-flex items-center gap-0.5">
-          <button onClick={() => updateField(item.id, 'current_stock', Math.max(0, item.current_stock - 1))}
-            className="p-0.5 rounded hover:bg-neutral-100 text-neutral-400 hover:text-ink transition">
-            <Minus size={12} strokeWidth={2} />
+          <button onClick={() => onBuyChange(item.id, -1)}
+            className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-ink transition">
+            <Minus size={14} strokeWidth={2} />
           </button>
-          <span className={cn('font-medium px-1.5 min-w-[2rem] text-center',
-            isCritical ? 'text-red-700' : isLow ? 'text-amber-700' : 'text-neutral-700'
-          )}>{item.current_stock}</span>
-          <button onClick={() => updateField(item.id, 'current_stock', item.current_stock + 1)}
-            className="p-0.5 rounded hover:bg-neutral-100 text-neutral-400 hover:text-ink transition">
-            <Plus size={12} strokeWidth={2} />
+          <span className={cn('font-bold px-2 min-w-[2.5rem] text-center tabular-nums',
+            buyQty > 0 ? 'text-red-700' : 'text-neutral-300'
+          )}>{buyQty}</span>
+          <button onClick={() => onBuyChange(item.id, 1)}
+            className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-ink transition">
+            <Plus size={14} strokeWidth={2} />
           </button>
         </div>
-      </td>
-      <td className="px-2 py-2 text-center">
-        {deficit > 0 ? <span className="text-red-700 font-bold">{deficit}</span> : <span className="text-green-600 text-xs">OK</span>}
       </td>
       <td className="px-2 py-2">
         <select value={item.supplier_id ?? ''} onChange={(e) => updateSupplier(item.id, 'supplier_id', e.target.value)}
@@ -620,72 +503,49 @@ const DesktopRow = memo(function DesktopRow({
 });
 
 const MobileCard = memo(function MobileCard({
-  item, suppliers, updateField, updateSupplier, onDelete,
+  item, suppliers, buyQty, onBuyChange, updateField, updateSupplier, onDelete,
 }: {
   item: InventoryItem;
   suppliers: Supplier[];
+  buyQty: number;
+  onBuyChange: (id: string, delta: number) => void;
   updateField: (id: string, field: string, value: any) => void;
   updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
   onDelete: () => void;
 }) {
-  const deficit = Math.max(0, item.par_stock - item.current_stock);
-  const isLow = item.par_stock > 0 && item.current_stock < item.par_stock;
-  const isCritical = item.par_stock > 0 && item.current_stock <= item.par_stock * 0.5;
-  const counted = isCountedToday(item);
   const [expanded, setExpanded] = useState(false);
 
   return (
     <div className={cn(
       'border rounded px-2 py-2.5',
-      counted ? 'bg-teal-50/50 border-teal-200' :
-      isCritical ? 'bg-red-50/30 border-red-200' :
-      isLow ? 'bg-amber-50/30 border-amber-200' :
-      'bg-white border-neutral-200'
+      buyQty > 0 ? 'bg-red-50/40 border-red-200' : 'bg-white border-neutral-200'
     )}>
-      {/* Row 1: name + par/buy */}
+      {/* Row 1: name + buy stepper */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <InlineEdit value={item.name} field="name" itemId={item.id} onSave={updateField} className="font-medium text-sm w-full" />
-          <div className="flex gap-1 mt-0.5">
-            <InlineEdit value={item.unit} field="unit" itemId={item.id} onSave={updateField} className="text-xs text-neutral-400 w-16" />
-            <InlineEdit value={item.unit_size ?? ''} field="unit_size" itemId={item.id} onSave={updateField} className="text-xs text-neutral-400 w-20" />
-          </div>
-        </div>
-        <div className="flex items-center gap-3 shrink-0 text-center">
-          <div>
-            <div className="text-[9px] uppercase tracking-wider text-neutral-400">Par</div>
-            <InlineEdit value={item.par_stock} field="par_stock" itemId={item.id} onSave={updateField} type="number" className="text-sm text-neutral-500 text-center w-10" />
-          </div>
-          <div>
-            <div className="text-[9px] uppercase tracking-wider text-neutral-400">Buy</div>
-            {deficit > 0 ? (
-              <span className="text-sm font-bold text-red-700">{deficit}</span>
-            ) : (
-              <span className="text-[10px] text-green-600">OK</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 2: stepper for actual stock */}
-      <div className="flex items-center justify-between mt-2">
-        <span className="text-[9px] uppercase tracking-wider text-neutral-400">Actual</span>
-        <div className="inline-flex items-center gap-0 border border-neutral-200 rounded-lg overflow-hidden">
-          <button onClick={() => updateField(item.id, 'current_stock', Math.max(0, item.current_stock - 1))}
-            className="px-2.5 py-1.5 bg-neutral-50 active:bg-neutral-200 text-neutral-500 transition">
+        <button onClick={() => setExpanded(!expanded)} className="flex-1 min-w-0 text-left">
+          <span className="font-medium text-sm block truncate">{item.name}</span>
+          <span className="text-[10px] text-neutral-400 block truncate">
+            {item.supplier ? item.supplier.name : ''}
+            {item.supplier && item.unit ? ' · ' : ''}
+            {item.unit}{item.unit_size ? ` (${item.unit_size})` : ''}
+          </span>
+        </button>
+        <div className="inline-flex items-center border border-neutral-200 rounded-lg overflow-hidden shrink-0">
+          <button onClick={() => onBuyChange(item.id, -1)}
+            className="px-2 py-2 bg-neutral-50 active:bg-neutral-200 text-neutral-500 transition">
             <Minus size={16} strokeWidth={2} />
           </button>
-          <span className={cn('px-2 py-1.5 min-w-[2.5rem] text-center text-base font-bold tabular-nums',
-            isCritical ? 'text-red-700 bg-red-50' : isLow ? 'text-amber-700 bg-amber-50' : 'text-neutral-700'
-          )}>{item.current_stock}</span>
-          <button onClick={() => updateField(item.id, 'current_stock', item.current_stock + 1)}
-            className="px-2.5 py-1.5 bg-neutral-50 active:bg-neutral-200 text-neutral-500 transition">
+          <span className={cn('px-1.5 py-2 min-w-[2rem] text-center text-base font-bold tabular-nums',
+            buyQty > 0 ? 'text-red-700 bg-red-50' : 'text-neutral-300'
+          )}>{buyQty}</span>
+          <button onClick={() => onBuyChange(item.id, 1)}
+            className="px-2 py-2 bg-neutral-50 active:bg-neutral-200 text-neutral-500 transition">
             <Plus size={16} strokeWidth={2} />
           </button>
         </div>
       </div>
 
-      {/* Expanded section: supplier + actions */}
+      {/* Expanded: supplier dropdowns + delete */}
       {expanded && (
         <div className="mt-3 pt-3 border-t border-neutral-100 space-y-2">
           <div className="grid grid-cols-2 gap-2">
@@ -713,163 +573,9 @@ const MobileCard = memo(function MobileCard({
           </div>
         </div>
       )}
-
-      {/* Supplier hint when collapsed */}
-      {!expanded && item.supplier && (
-        <div className="mt-1 text-[10px] text-neutral-400 truncate">{item.supplier.name}</div>
-      )}
     </div>
   );
 });
-
-function OrderSheetModal({
-  items,
-  suppliers,
-  onClose,
-}: {
-  items: InventoryItem[];
-  suppliers: Supplier[];
-  onClose: () => void;
-}) {
-  const supplierMap = useMemo(() => {
-    const map: Record<string, { supplierName: string; items: (InventoryItem & { toBuy: number })[] }> = {};
-
-    for (const item of items) {
-      const deficit = Math.max(0, item.par_stock - item.current_stock);
-      if (deficit <= 0) continue;
-
-      const supplierId = item.supplier_id ?? '__none__';
-
-      if (!map[supplierId]) {
-        map[supplierId] = {
-          supplierName: item.supplier?.name ?? 'No supplier assigned',
-          items: [],
-        };
-      }
-      map[supplierId].items.push({ ...item, toBuy: deficit });
-    }
-
-    const sorted = Object.entries(map).sort(([a], [b]) => {
-      if (a === '__none__') return 1;
-      if (b === '__none__') return -1;
-      return map[a].supplierName.localeCompare(map[b].supplierName);
-    });
-
-    return sorted;
-  }, [items]);
-
-  function copySupplierList(supplierItems: (InventoryItem & { toBuy: number })[], supplierName: string): void {
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    let text = `Order for ${supplierName} — ${today}\n`;
-    text += '─'.repeat(40) + '\n';
-    for (const item of supplierItems) {
-      text += `${item.toBuy} ${item.unit}  ${item.name}`;
-      if (item.unit_size) text += ` (${item.unit_size})`;
-      text += '\n';
-    }
-    navigator.clipboard.writeText(text);
-  }
-
-  function copyFullOrder() {
-    const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    let text = `Che Bar — Purchase Order — ${today}\n`;
-    text += '═'.repeat(40) + '\n\n';
-
-    for (const [, { supplierName, items: sItems }] of supplierMap) {
-      text += `▸ ${supplierName}\n`;
-      text += '─'.repeat(40) + '\n';
-      for (const item of sItems) {
-        text += `  ${item.toBuy} ${item.unit}  ${item.name}`;
-        if (item.unit_size) text += ` (${item.unit_size})`;
-        text += '\n';
-      }
-      text += '\n';
-    }
-
-    navigator.clipboard.writeText(text);
-  }
-
-  const totalItems = items.filter((i) => i.par_stock - i.current_stock > 0).length;
-
-  return (
-    <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-50 px-4" onClick={onClose}>
-      <div
-        className="bg-cream border border-neutral-200 rounded-lg w-full max-w-2xl shadow-lg max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
-          <div>
-            <h2 className="font-display text-xl">Purchase Order</h2>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              {totalItems} items to order from {supplierMap.length} supplier{supplierMap.length !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={copyFullOrder}
-              className="flex items-center gap-1.5 bg-ink text-cream px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition"
-            >
-              <FileText size={12} strokeWidth={2} />
-              Copy all
-            </button>
-            <button onClick={onClose} className="text-neutral-400 hover:text-ink transition p-1">
-              <X size={18} strokeWidth={1.5} />
-            </button>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div className="overflow-y-auto px-6 py-4 space-y-6">
-          {supplierMap.map(([supplierId, { supplierName, items: sItems }]) => (
-            <div key={supplierId}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Truck size={14} className="text-neutral-400" />
-                  <h3 className="font-medium text-sm">
-                    {supplierName}
-                  </h3>
-                  <span className="text-xs text-neutral-400">({sItems.length} items)</span>
-                </div>
-                <button
-                  onClick={() => copySupplierList(sItems, supplierName)}
-                  className="text-xs text-gold hover:text-gold/80 uppercase tracking-widest transition"
-                >
-                  Copy list
-                </button>
-              </div>
-              <div className="bg-white border border-neutral-200 rounded overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-400">
-                      <th className="text-left px-4 py-2 font-normal">Item</th>
-                      <th className="text-center px-3 py-2 font-normal w-16">Buy</th>
-                      <th className="text-left px-3 py-2 font-normal w-16">Unit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sItems.map((item) => (
-                      <tr key={item.id} className="border-b border-neutral-50 last:border-b-0">
-                        <td className="px-4 py-2">
-                          {item.name}
-                          {item.unit_size && (
-                            <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-center font-bold text-red-700">{item.toBuy}</td>
-                        <td className="px-3 py-2 text-neutral-500">{item.unit}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ItemModal({
   item,
