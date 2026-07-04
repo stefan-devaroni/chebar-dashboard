@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { Truck, FileText, Check, Clock, Package, ChevronDown, ChevronRight } from 'lucide-react';
+import { Truck, FileText, Check, Clock, Package, ChevronDown, ChevronRight, ClipboardCheck, AlertTriangle } from 'lucide-react';
 
 interface OrderItem {
   name: string;
@@ -39,6 +39,32 @@ export function OrdersView({
   const [expandedOrder, setExpandedOrder] = useState<string | null>(
     initialOrders.length > 0 ? initialOrders[0].id : null
   );
+  // Track which supplier sections are in "checking delivery" mode
+  // Key: "orderId:supplierId", value: Set of checked item indices
+  const [checking, setChecking] = useState<Record<string, Set<number>>>({});
+
+  const checkKey = (orderId: string, supplierId: string) => `${orderId}:${supplierId}`;
+
+  const startChecking = useCallback((orderId: string, supplierId: string, itemCount: number) => {
+    setChecking((prev) => ({ ...prev, [checkKey(orderId, supplierId)]: new Set() }));
+  }, []);
+
+  const toggleCheck = useCallback((orderId: string, supplierId: string, idx: number) => {
+    setChecking((prev) => {
+      const key = checkKey(orderId, supplierId);
+      const current = new Set(prev[key] ?? []);
+      if (current.has(idx)) current.delete(idx); else current.add(idx);
+      return { ...prev, [key]: current };
+    });
+  }, []);
+
+  const stopChecking = useCallback((orderId: string, supplierId: string) => {
+    setChecking((prev) => {
+      const next = { ...prev };
+      delete next[checkKey(orderId, supplierId)];
+      return next;
+    });
+  }, []);
 
   function getSupplierStatus(order: PurchaseOrder, supplierId: string): string {
     return order.supplier_statuses?.[supplierId] ?? order.status ?? 'draft';
@@ -200,6 +226,12 @@ export function OrdersView({
                 {/* Supplier groups */}
                 {grouped.map(([supplierId, { supplierName, items }]) => {
                   const sStatus = getSupplierStatus(order, supplierId);
+                  const ck = checkKey(order.id, supplierId);
+                  const checkedSet = checking[ck];
+                  const isChecking = checkedSet !== undefined;
+                  const checkedCount = checkedSet?.size ?? 0;
+                  const allChecked = isChecking && checkedCount === items.length;
+                  const missingCount = isChecking ? items.length - checkedCount : 0;
 
                   return (
                     <div key={supplierId} className={cn(
@@ -226,43 +258,107 @@ export function OrdersView({
                         </button>
                       </div>
 
+                      {/* Checking progress bar */}
+                      {isChecking && (
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className={cn('font-medium', allChecked ? 'text-green-700' : 'text-blue-700')}>
+                              {checkedCount}/{items.length} checked
+                            </span>
+                            {missingCount > 0 && checkedCount > 0 && (
+                              <span className="flex items-center gap-1 text-amber-600">
+                                <AlertTriangle size={10} strokeWidth={2} />
+                                {missingCount} not checked
+                              </span>
+                            )}
+                          </div>
+                          <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
+                            <div
+                              className={cn('h-full rounded-full transition-all', allChecked ? 'bg-green-500' : 'bg-blue-500')}
+                              style={{ width: `${items.length > 0 ? (checkedCount / items.length) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       {/* Items list */}
                       <div className="bg-white border border-neutral-200 rounded overflow-hidden mb-3">
                         {/* Desktop table */}
                         <table className="w-full text-sm hidden sm:table">
                           <thead>
                             <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-400">
+                              {isChecking && <th className="px-2 py-2 w-8"></th>}
                               <th className="text-left px-4 py-2 font-normal">Item</th>
                               <th className="text-center px-3 py-2 font-normal w-16">Qty</th>
                               <th className="text-left px-3 py-2 font-normal w-20">Unit</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {items.map((item, idx) => (
-                              <tr key={idx} className="border-b border-neutral-50 last:border-b-0">
-                                <td className="px-4 py-2">
-                                  {item.name}
-                                  {item.unit_size && <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>}
-                                </td>
-                                <td className="px-3 py-2 text-center font-bold text-red-700">{item.toBuy}</td>
-                                <td className="px-3 py-2 text-neutral-500">{item.unit}</td>
-                              </tr>
-                            ))}
+                            {items.map((item, idx) => {
+                              const checked = checkedSet?.has(idx) ?? false;
+                              return (
+                                <tr
+                                  key={idx}
+                                  className={cn(
+                                    'border-b border-neutral-50 last:border-b-0 transition',
+                                    isChecking && checked ? 'bg-green-50/60' : '',
+                                    isChecking && !checked ? 'cursor-pointer hover:bg-neutral-50' : ''
+                                  )}
+                                  onClick={isChecking ? () => toggleCheck(order.id, supplierId, idx) : undefined}
+                                >
+                                  {isChecking && (
+                                    <td className="px-2 py-2 text-center">
+                                      <div className={cn(
+                                        'w-5 h-5 rounded border-2 flex items-center justify-center transition',
+                                        checked ? 'bg-green-500 border-green-500' : 'border-neutral-300'
+                                      )}>
+                                        {checked && <Check size={12} strokeWidth={3} className="text-white" />}
+                                      </div>
+                                    </td>
+                                  )}
+                                  <td className={cn('px-4 py-2', isChecking && checked ? 'line-through text-neutral-400' : '')}>
+                                    {item.name}
+                                    {item.unit_size && <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>}
+                                  </td>
+                                  <td className={cn('px-3 py-2 text-center font-bold', isChecking && checked ? 'text-green-600' : 'text-red-700')}>{item.toBuy}</td>
+                                  <td className="px-3 py-2 text-neutral-500">{item.unit}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                         {/* Mobile list */}
                         <div className="sm:hidden divide-y divide-neutral-100">
-                          {items.map((item, idx) => (
-                            <div key={idx} className="px-3 py-2 flex items-center justify-between">
-                              <div className="min-w-0">
-                                <span className="text-sm block truncate">{item.name}</span>
-                                {item.unit_size && <span className="text-xs text-neutral-400">{item.unit_size}</span>}
+                          {items.map((item, idx) => {
+                            const checked = checkedSet?.has(idx) ?? false;
+                            return (
+                              <div
+                                key={idx}
+                                className={cn(
+                                  'px-3 py-2.5 flex items-center gap-3 transition',
+                                  isChecking && checked ? 'bg-green-50/60' : '',
+                                  isChecking && !checked ? 'active:bg-neutral-50' : ''
+                                )}
+                                onClick={isChecking ? () => toggleCheck(order.id, supplierId, idx) : undefined}
+                              >
+                                {isChecking && (
+                                  <div className={cn(
+                                    'w-6 h-6 rounded border-2 flex items-center justify-center shrink-0 transition',
+                                    checked ? 'bg-green-500 border-green-500' : 'border-neutral-300'
+                                  )}>
+                                    {checked && <Check size={14} strokeWidth={3} className="text-white" />}
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <span className={cn('text-sm block truncate', isChecking && checked ? 'line-through text-neutral-400' : '')}>{item.name}</span>
+                                  {item.unit_size && <span className="text-xs text-neutral-400">{item.unit_size}</span>}
+                                </div>
+                                <span className={cn('font-bold text-sm shrink-0 ml-2', isChecking && checked ? 'text-green-600' : 'text-red-700')}>
+                                  {item.toBuy} {item.unit}
+                                </span>
                               </div>
-                              <span className="font-bold text-red-700 text-sm shrink-0 ml-2">
-                                {item.toBuy} {item.unit}
-                              </span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -277,7 +373,39 @@ export function OrdersView({
                             Mark sent
                           </button>
                         )}
-                        {sStatus === 'sent' && (
+                        {sStatus === 'sent' && !isChecking && (
+                          <button
+                            onClick={() => startChecking(order.id, supplierId, items.length)}
+                            className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-blue-700 transition"
+                          >
+                            <ClipboardCheck size={12} strokeWidth={2} />
+                            Check delivery
+                          </button>
+                        )}
+                        {sStatus === 'sent' && isChecking && (
+                          <>
+                            <button
+                              onClick={() => { updateSupplierStatus(order.id, supplierId, 'received'); stopChecking(order.id, supplierId); }}
+                              disabled={checkedCount === 0}
+                              className={cn(
+                                'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs uppercase tracking-widest transition',
+                                allChecked
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'border border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-40'
+                              )}
+                            >
+                              <Check size={12} strokeWidth={2} />
+                              {allChecked ? 'All received' : `Receive (${missingCount} missing)`}
+                            </button>
+                            <button
+                              onClick={() => stopChecking(order.id, supplierId)}
+                              className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-50 transition"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                        {sStatus === 'sent' && !isChecking && (
                           <button
                             onClick={() => updateSupplierStatus(order.id, supplierId, 'received')}
                             className="flex items-center gap-1.5 border border-green-300 text-green-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-green-50 transition"
@@ -286,7 +414,7 @@ export function OrdersView({
                             Mark received
                           </button>
                         )}
-                        {sStatus !== 'draft' && (
+                        {sStatus !== 'draft' && !isChecking && (
                           <button
                             onClick={() => updateSupplierStatus(order.id, supplierId, 'draft')}
                             className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-50 transition"
