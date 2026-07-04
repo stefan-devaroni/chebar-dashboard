@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Plus, Minus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText, Download, Upload } from 'lucide-react';
@@ -120,7 +120,8 @@ export function InventoryManager({
     });
   }
 
-  async function updateField(id: string, field: string, value: any) {
+  const updateField = useCallback(async (id: string, field: string, value: any) => {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
     const res = await fetch('/api/inventory', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -130,9 +131,10 @@ export function InventoryManager({
       const updated = await res.json();
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
     }
-  }
+  }, []);
 
-  async function updateSupplier(id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) {
+  const updateSupplier = useCallback(async (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, [field]: value || null } : i)));
     const res = await fetch('/api/inventory', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -142,7 +144,7 @@ export function InventoryManager({
       const updated = await res.json();
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
     }
-  }
+  }, []);
 
   async function deleteItem(id: string) {
     if (!confirm('Remove this item from inventory?')) return;
@@ -543,7 +545,7 @@ function InlineEdit({ value, field, itemId, onSave, type = 'text', className }: 
   );
 }
 
-function DesktopRow({
+const DesktopRow = memo(function DesktopRow({
   item, suppliers, updateField, updateSupplier, onDelete,
 }: {
   item: InventoryItem;
@@ -615,9 +617,9 @@ function DesktopRow({
       </td>
     </tr>
   );
-}
+});
 
-function MobileCard({
+const MobileCard = memo(function MobileCard({
   item, suppliers, updateField, updateSupplier, onDelete,
 }: {
   item: InventoryItem;
@@ -718,7 +720,7 @@ function MobileCard({
       )}
     </div>
   );
-}
+});
 
 function OrderSheetModal({
   items,
