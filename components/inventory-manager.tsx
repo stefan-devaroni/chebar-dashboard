@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Plus, Minus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText, Download, Upload } from 'lucide-react';
@@ -374,13 +374,6 @@ export function InventoryManager({
           </button>
         )}
         <button
-          onClick={() => router.push('/dashboard/purchasing/bulk-edit')}
-          className="flex items-center gap-1.5 border border-teal-400 text-teal-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-teal-50 transition"
-        >
-          <Pencil size={12} strokeWidth={2} />
-          Bulk edit suppliers
-        </button>
-        <button
           onClick={() => setShowAddSupplier(true)}
           className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
         >
@@ -445,13 +438,15 @@ export function InventoryManager({
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-500">
-                            <th className="text-left px-4 py-2.5 font-normal">Item</th>
-                            <th className="text-center px-2 py-2.5 font-normal w-16">Par</th>
+                            <th className="text-left px-3 py-2.5 font-normal">Item</th>
+                            <th className="text-left px-1 py-2.5 font-normal w-20">Unit</th>
+                            <th className="text-left px-1 py-2.5 font-normal w-24">Size</th>
+                            <th className="text-center px-1 py-2.5 font-normal w-16">Par</th>
                             <th className="text-center px-2 py-2.5 font-normal w-20">Actual</th>
                             <th className="text-center px-2 py-2.5 font-normal w-16">Buy</th>
                             <th className="text-left px-2 py-2.5 font-normal w-36">Supplier</th>
                             <th className="text-left px-2 py-2.5 font-normal w-36">Backup</th>
-                            <th className="px-2 py-2.5 w-14"></th>
+                            <th className="px-2 py-2.5 w-8"></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -462,7 +457,6 @@ export function InventoryManager({
                               suppliers={suppliers}
                               updateField={updateField}
                               updateSupplier={updateSupplier}
-                              onEdit={() => { setEditingItem(item); setShowAddItem(true); }}
                               onDelete={() => deleteItem(item.id)}
                             />
                           ))}
@@ -479,7 +473,6 @@ export function InventoryManager({
                           suppliers={suppliers}
                           updateField={updateField}
                           updateSupplier={updateSupplier}
-                          onEdit={() => { setEditingItem(item); setShowAddItem(true); }}
                           onDelete={() => deleteItem(item.id)}
                         />
                       ))}
@@ -515,14 +508,48 @@ export function InventoryManager({
   );
 }
 
+function InlineEdit({ value, field, itemId, onSave, type = 'text', className }: {
+  value: string | number;
+  field: string;
+  itemId: string;
+  onSave: (id: string, field: string, value: any) => void;
+  type?: 'text' | 'number';
+  className?: string;
+}) {
+  const [local, setLocal] = useState(String(value ?? ''));
+  const ref = useRef<HTMLInputElement>(null);
+
+  function handleBlur() {
+    const trimmed = local.trim();
+    const original = String(value ?? '');
+    if (trimmed !== original) {
+      onSave(itemId, field, type === 'number' ? (Number(trimmed) || 0) : (trimmed || null));
+    }
+  }
+
+  return (
+    <input
+      ref={ref}
+      type={type}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={handleBlur}
+      onKeyDown={(e) => { if (e.key === 'Enter') ref.current?.blur(); }}
+      className={cn(
+        'border border-transparent hover:border-neutral-200 focus:border-gold rounded px-1.5 py-0.5 bg-transparent focus:bg-white focus:outline-none transition',
+        className
+      )}
+    />
+  );
+}
+
 function DesktopRow({
-  item, suppliers, updateField, updateSupplier, onEdit, onDelete,
+  item, suppliers, updateField, updateSupplier, onDelete,
 }: {
   item: InventoryItem;
   suppliers: Supplier[];
   updateField: (id: string, field: string, value: any) => void;
   updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
-  onEdit: () => void;
   onDelete: () => void;
 }) {
   const deficit = Math.max(0, item.par_stock - item.current_stock);
@@ -537,13 +564,17 @@ function DesktopRow({
       isCritical ? 'bg-red-50/50' :
       isLow ? 'bg-amber-50/50' : ''
     )}>
-      <td className="px-4 py-2">
-        <span className="font-medium">{item.name}</span>
-        {item.unit_size && <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>}
-        <span className="text-xs text-neutral-400 ml-1.5">/ {item.unit}</span>
+      <td className="px-3 py-1">
+        <InlineEdit value={item.name} field="name" itemId={item.id} onSave={updateField} className="font-medium text-sm w-full" />
       </td>
-      <td className="px-2 py-2 text-center">
-        <span className="text-neutral-600">{item.par_stock}</span>
+      <td className="px-1 py-1">
+        <InlineEdit value={item.unit} field="unit" itemId={item.id} onSave={updateField} className="text-xs text-neutral-500 w-full" />
+      </td>
+      <td className="px-1 py-1">
+        <InlineEdit value={item.unit_size ?? ''} field="unit_size" itemId={item.id} onSave={updateField} className="text-xs text-neutral-500 w-full" />
+      </td>
+      <td className="px-1 py-1">
+        <InlineEdit value={item.par_stock} field="par_stock" itemId={item.id} onSave={updateField} type="number" className="text-sm text-center w-14" />
       </td>
       <td className="px-2 py-2 text-center">
         <div className="inline-flex items-center gap-0.5">
@@ -578,27 +609,21 @@ function DesktopRow({
         </select>
       </td>
       <td className="px-2 py-2">
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-          <button onClick={onEdit} className="p-1 text-neutral-400 hover:text-ink transition" title="Edit details">
-            <Pencil size={12} strokeWidth={1.5} />
-          </button>
-          <button onClick={onDelete} className="p-1 text-neutral-400 hover:text-red-600 transition" title="Delete">
-            <Trash2 size={12} strokeWidth={1.5} />
-          </button>
-        </div>
+        <button onClick={onDelete} className="p-1 text-neutral-400 hover:text-red-600 transition opacity-0 group-hover:opacity-100" title="Delete">
+          <Trash2 size={12} strokeWidth={1.5} />
+        </button>
       </td>
     </tr>
   );
 }
 
 function MobileCard({
-  item, suppliers, updateField, updateSupplier, onEdit, onDelete,
+  item, suppliers, updateField, updateSupplier, onDelete,
 }: {
   item: InventoryItem;
   suppliers: Supplier[];
   updateField: (id: string, field: string, value: any) => void;
   updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
-  onEdit: () => void;
   onDelete: () => void;
 }) {
   const deficit = Math.max(0, item.par_stock - item.current_stock);
@@ -617,14 +642,17 @@ function MobileCard({
     )}>
       {/* Row 1: name + par/buy */}
       <div className="flex items-center justify-between gap-2">
-        <button onClick={() => setExpanded(!expanded)} className="text-left flex-1 min-w-0">
-          <span className="font-medium text-sm block truncate">{item.name}</span>
-          <span className="text-xs text-neutral-400">{item.unit}{item.unit_size ? ` (${item.unit_size})` : ''}</span>
-        </button>
+        <div className="flex-1 min-w-0">
+          <InlineEdit value={item.name} field="name" itemId={item.id} onSave={updateField} className="font-medium text-sm w-full" />
+          <div className="flex gap-1 mt-0.5">
+            <InlineEdit value={item.unit} field="unit" itemId={item.id} onSave={updateField} className="text-xs text-neutral-400 w-16" />
+            <InlineEdit value={item.unit_size ?? ''} field="unit_size" itemId={item.id} onSave={updateField} className="text-xs text-neutral-400 w-20" />
+          </div>
+        </div>
         <div className="flex items-center gap-3 shrink-0 text-center">
           <div>
             <div className="text-[9px] uppercase tracking-wider text-neutral-400">Par</div>
-            <span className="text-sm text-neutral-500">{item.par_stock}</span>
+            <InlineEdit value={item.par_stock} field="par_stock" itemId={item.id} onSave={updateField} type="number" className="text-sm text-neutral-500 text-center w-10" />
           </div>
           <div>
             <div className="text-[9px] uppercase tracking-wider text-neutral-400">Buy</div>
@@ -677,9 +705,6 @@ function MobileCard({
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <button onClick={onEdit} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-ink transition">
-              <Pencil size={11} strokeWidth={1.5} /> Edit
-            </button>
             <button onClick={onDelete} className="flex items-center gap-1 text-xs text-neutral-500 hover:text-red-600 transition">
               <Trash2 size={11} strokeWidth={1.5} /> Delete
             </button>
