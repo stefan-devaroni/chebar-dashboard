@@ -18,25 +18,24 @@ export default async function SchedulePage() {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
 
+  const mondayStr = monday.toISOString().split('T')[0];
+  const sundayStr = sunday.toISOString().split('T')[0];
+
   const { data: shifts } = await supabase
     .from('shifts')
-    .select('*, team_members(id, name, color, department)')
-    .gte('date', monday.toISOString().split('T')[0])
-    .lte('date', sunday.toISOString().split('T')[0])
-    .order('start_time');
+    .select('*')
+    .gte('date', mondayStr)
+    .lte('date', sundayStr);
 
   return (
     <div>
-      <header className="mb-8">
+      <header className="mb-6">
         <h1 className="font-display text-3xl">Schedule</h1>
-        <p className="text-sm text-neutral-500 mt-1">
-          Weekly shift planner for the team.
-        </p>
       </header>
       <WeeklySchedule
         initialShifts={shifts ?? []}
         members={members ?? []}
-        initialWeekStart={monday.toISOString().split('T')[0]}
+        initialWeekStart={mondayStr}
       />
     </div>
   );
