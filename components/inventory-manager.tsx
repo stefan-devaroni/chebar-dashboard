@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Plus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText } from 'lucide-react';
+import { Plus, Minus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText } from 'lucide-react';
 
 interface Supplier {
   id: string;
@@ -61,7 +61,6 @@ export function InventoryManager({
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [showOrderSheet, setShowOrderSheet] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [editingField, setEditingField] = useState<{ id: string; field: 'par_stock' | 'current_stock' } | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(() => {
@@ -114,7 +113,6 @@ export function InventoryManager({
       const updated = await res.json();
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
     }
-    setEditingField(null);
   }
 
   async function updateSupplier(id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) {
@@ -328,8 +326,6 @@ export function InventoryManager({
                               key={item.id}
                               item={item}
                               suppliers={suppliers}
-                              editingField={editingField}
-                              setEditingField={setEditingField}
                               updateField={updateField}
                               updateSupplier={updateSupplier}
                               onEdit={() => { setEditingItem(item); setShowAddItem(true); }}
@@ -347,8 +343,6 @@ export function InventoryManager({
                           key={item.id}
                           item={item}
                           suppliers={suppliers}
-                          editingField={editingField}
-                          setEditingField={setEditingField}
                           updateField={updateField}
                           updateSupplier={updateSupplier}
                           onEdit={() => { setEditingItem(item); setShowAddItem(true); }}
@@ -395,12 +389,10 @@ export function InventoryManager({
 }
 
 function DesktopRow({
-  item, suppliers, editingField, setEditingField, updateField, updateSupplier, onEdit, onDelete,
+  item, suppliers, updateField, updateSupplier, onEdit, onDelete,
 }: {
   item: InventoryItem;
   suppliers: Supplier[];
-  editingField: { id: string; field: 'par_stock' | 'current_stock' } | null;
-  setEditingField: (f: { id: string; field: 'par_stock' | 'current_stock' } | null) => void;
   updateField: (id: string, field: string, value: any) => void;
   updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
   onEdit: () => void;
@@ -422,28 +414,22 @@ function DesktopRow({
         <span className="text-xs text-neutral-400 ml-1.5">/ {item.unit}</span>
       </td>
       <td className="px-2 py-2 text-center">
-        {editingField?.id === item.id && editingField.field === 'par_stock' ? (
-          <input type="number" min="0" step="0.5" defaultValue={item.par_stock} autoFocus
-            onBlur={(e) => updateField(item.id, 'par_stock', parseFloat(e.target.value) || 0)}
-            onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'par_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
-            className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none" />
-        ) : (
-          <button onClick={() => setEditingField({ id: item.id, field: 'par_stock' })}
-            className="text-neutral-600 hover:bg-neutral-100 px-2 py-0.5 rounded transition">{item.par_stock}</button>
-        )}
+        <span className="text-neutral-600">{item.par_stock}</span>
       </td>
       <td className="px-2 py-2 text-center">
-        {editingField?.id === item.id && editingField.field === 'current_stock' ? (
-          <input type="number" min="0" step="0.5" defaultValue={item.current_stock} autoFocus
-            onBlur={(e) => updateField(item.id, 'current_stock', parseFloat(e.target.value) || 0)}
-            onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'current_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
-            className="w-16 text-center bg-cream border border-gold rounded px-1 py-0.5 text-sm focus:outline-none" />
-        ) : (
-          <button onClick={() => setEditingField({ id: item.id, field: 'current_stock' })}
-            className={cn('font-medium px-2 py-0.5 rounded transition',
-              isCritical ? 'text-red-700 bg-red-100' : isLow ? 'text-amber-700 bg-amber-100' : 'text-neutral-700 hover:bg-neutral-100'
-            )}>{item.current_stock}</button>
-        )}
+        <div className="inline-flex items-center gap-0.5">
+          <button onClick={() => updateField(item.id, 'current_stock', Math.max(0, item.current_stock - 1))}
+            className="p-0.5 rounded hover:bg-neutral-100 text-neutral-400 hover:text-ink transition">
+            <Minus size={12} strokeWidth={2} />
+          </button>
+          <span className={cn('font-medium px-1.5 min-w-[2rem] text-center',
+            isCritical ? 'text-red-700' : isLow ? 'text-amber-700' : 'text-neutral-700'
+          )}>{item.current_stock}</span>
+          <button onClick={() => updateField(item.id, 'current_stock', item.current_stock + 1)}
+            className="p-0.5 rounded hover:bg-neutral-100 text-neutral-400 hover:text-ink transition">
+            <Plus size={12} strokeWidth={2} />
+          </button>
+        </div>
       </td>
       <td className="px-2 py-2 text-center">
         {deficit > 0 ? <span className="text-red-700 font-bold">{deficit}</span> : <span className="text-green-600 text-xs">OK</span>}
@@ -477,12 +463,10 @@ function DesktopRow({
 }
 
 function MobileCard({
-  item, suppliers, editingField, setEditingField, updateField, updateSupplier, onEdit, onDelete,
+  item, suppliers, updateField, updateSupplier, onEdit, onDelete,
 }: {
   item: InventoryItem;
   suppliers: Supplier[];
-  editingField: { id: string; field: 'par_stock' | 'current_stock' } | null;
-  setEditingField: (f: { id: string; field: 'par_stock' | 'current_stock' } | null) => void;
   updateField: (id: string, field: string, value: any) => void;
   updateSupplier: (id: string, field: 'supplier_id' | 'backup_supplier_id', value: string) => void;
   onEdit: () => void;
@@ -495,54 +479,23 @@ function MobileCard({
 
   return (
     <div className={cn(
-      'bg-white border rounded px-2.5 py-2.5',
+      'bg-white border rounded px-2 py-2.5',
       isCritical ? 'border-red-200 bg-red-50/30' :
       isLow ? 'border-amber-200 bg-amber-50/30' :
       'border-neutral-200'
     )}>
-      {/* Top row: name + numbers */}
+      {/* Row 1: name + par/buy */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <button onClick={() => setExpanded(!expanded)} className="text-left w-full">
-            <span className="font-medium text-sm block truncate">{item.name}</span>
-            <span className="text-xs text-neutral-400">{item.unit}{item.unit_size ? ` (${item.unit_size})` : ''}</span>
-          </button>
-        </div>
-
-        {/* Par / Actual / Buy compact row */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          {/* Par */}
-          <div className="text-center w-10">
+        <button onClick={() => setExpanded(!expanded)} className="text-left flex-1 min-w-0">
+          <span className="font-medium text-sm block truncate">{item.name}</span>
+          <span className="text-xs text-neutral-400">{item.unit}{item.unit_size ? ` (${item.unit_size})` : ''}</span>
+        </button>
+        <div className="flex items-center gap-3 shrink-0 text-center">
+          <div>
             <div className="text-[9px] uppercase tracking-wider text-neutral-400">Par</div>
-            {editingField?.id === item.id && editingField.field === 'par_stock' ? (
-              <input type="number" min="0" step="0.5" defaultValue={item.par_stock} autoFocus
-                onBlur={(e) => updateField(item.id, 'par_stock', parseFloat(e.target.value) || 0)}
-                onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'par_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
-                className="w-10 text-center bg-cream border border-gold rounded px-0.5 py-0.5 text-sm focus:outline-none" />
-            ) : (
-              <button onClick={() => setEditingField({ id: item.id, field: 'par_stock' })}
-                className="text-sm text-neutral-600 px-1 py-0.5 rounded hover:bg-neutral-100">{item.par_stock}</button>
-            )}
+            <span className="text-sm text-neutral-500">{item.par_stock}</span>
           </div>
-
-          {/* Actual */}
-          <div className="text-center w-12">
-            <div className="text-[9px] uppercase tracking-wider text-neutral-400">Have</div>
-            {editingField?.id === item.id && editingField.field === 'current_stock' ? (
-              <input type="number" min="0" step="0.5" defaultValue={item.current_stock} autoFocus
-                onBlur={(e) => updateField(item.id, 'current_stock', parseFloat(e.target.value) || 0)}
-                onKeyDown={(e) => { if (e.key === 'Enter') updateField(item.id, 'current_stock', parseFloat(e.currentTarget.value) || 0); if (e.key === 'Escape') setEditingField(null); }}
-                className="w-12 text-center bg-cream border border-gold rounded px-0.5 py-0.5 text-sm font-medium focus:outline-none" />
-            ) : (
-              <button onClick={() => setEditingField({ id: item.id, field: 'current_stock' })}
-                className={cn('text-sm font-bold px-1.5 py-0.5 rounded transition',
-                  isCritical ? 'text-red-700 bg-red-100' : isLow ? 'text-amber-700 bg-amber-100' : 'text-neutral-700 bg-neutral-100'
-                )}>{item.current_stock}</button>
-            )}
-          </div>
-
-          {/* Buy */}
-          <div className="text-center w-10">
+          <div>
             <div className="text-[9px] uppercase tracking-wider text-neutral-400">Buy</div>
             {deficit > 0 ? (
               <span className="text-sm font-bold text-red-700">{deficit}</span>
@@ -550,6 +503,24 @@ function MobileCard({
               <span className="text-[10px] text-green-600">OK</span>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Row 2: stepper for actual stock */}
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-[9px] uppercase tracking-wider text-neutral-400">Actual</span>
+        <div className="inline-flex items-center gap-0 border border-neutral-200 rounded-lg overflow-hidden">
+          <button onClick={() => updateField(item.id, 'current_stock', Math.max(0, item.current_stock - 1))}
+            className="px-2.5 py-1.5 bg-neutral-50 active:bg-neutral-200 text-neutral-500 transition">
+            <Minus size={16} strokeWidth={2} />
+          </button>
+          <span className={cn('px-2 py-1.5 min-w-[2.5rem] text-center text-base font-bold tabular-nums',
+            isCritical ? 'text-red-700 bg-red-50' : isLow ? 'text-amber-700 bg-amber-50' : 'text-neutral-700'
+          )}>{item.current_stock}</span>
+          <button onClick={() => updateField(item.id, 'current_stock', item.current_stock + 1)}
+            className="px-2.5 py-1.5 bg-neutral-50 active:bg-neutral-200 text-neutral-500 transition">
+            <Plus size={16} strokeWidth={2} />
+          </button>
         </div>
       </div>
 
