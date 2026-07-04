@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Plus, Minus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText } from 'lucide-react';
+import { Plus, Minus, X, Search, ShoppingCart, Package, ChevronDown, ChevronRight, Truck, Pencil, Trash2, ClipboardList, FileText, Download, Upload } from 'lucide-react';
 
 interface Supplier {
   id: string;
@@ -72,6 +72,8 @@ export function InventoryManager({
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [generatingOrder, setGeneratingOrder] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ updated: number; errors: string[] } | null>(null);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
@@ -214,6 +216,59 @@ export function InventoryManager({
     setShowAddSupplier(false);
   }
 
+  async function handleImportCSV(file: File) {
+    setImporting(true);
+    setImportResult(null);
+    const text = await file.text();
+    const lines = text.split('\n').filter((l) => l.trim());
+    const rows: any[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseCSVLine(lines[i]);
+      if (cols.length < 9) continue;
+      rows.push({
+        id: cols[0].trim(),
+        supplier: cols[7].trim(),
+        backup_supplier: cols[8].trim(),
+        station: cols[6].trim(),
+      });
+    }
+    const res = await fetch('/api/inventory/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows }),
+    });
+    if (res.ok) {
+      const result = await res.json();
+      setImportResult(result);
+      const refreshRes = await fetch('/api/inventory');
+      if (refreshRes.ok) {
+        const data = await refreshRes.json();
+        setItems(data.items);
+      }
+    }
+    setImporting(false);
+  }
+
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+        else if (ch === '"') { inQuotes = false; }
+        else { current += ch; }
+      } else {
+        if (ch === '"') { inQuotes = true; }
+        else if (ch === ',') { result.push(current); current = ''; }
+        else { current += ch; }
+      }
+    }
+    result.push(current);
+    return result;
+  }
+
   const countedToday = items.filter(isCountedToday).length;
 
   return (
@@ -318,6 +373,32 @@ export function InventoryManager({
             {generatingOrder ? 'Saving...' : `Generate order (${needsOrder.length} items)`}
           </button>
         )}
+        <a
+          href="/api/inventory/export"
+          download
+          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
+        >
+          <Download size={12} strokeWidth={2} />
+          Export CSV
+        </a>
+        <label className={cn(
+          'flex items-center gap-1.5 border px-3 py-1.5 rounded text-xs uppercase tracking-widest transition cursor-pointer',
+          importing ? 'border-gold bg-gold/10 text-gold' : 'border-teal-400 text-teal-700 hover:bg-teal-50'
+        )}>
+          <Upload size={12} strokeWidth={2} />
+          {importing ? 'Importing...' : 'Import CSV'}
+          <input
+            type="file"
+            accept=".csv"
+            className="hidden"
+            disabled={importing}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportCSV(file);
+              e.target.value = '';
+            }}
+          />
+        </label>
         <button
           onClick={() => setShowAddSupplier(true)}
           className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
@@ -333,6 +414,14 @@ export function InventoryManager({
           Add item
         </button>
       </div>
+
+      {importResult && (
+        <div className={cn('rounded p-3 mb-4 text-sm', importResult.errors.length > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200')}>
+          <p className="font-medium">{importResult.updated} items updated{importResult.errors.length > 0 ? `, ${importResult.errors.length} errors:` : '.'}</p>
+          {importResult.errors.map((e, i) => <p key={i} className="text-xs text-amber-700 mt-1">{e}</p>)}
+          <button onClick={() => setImportResult(null)} className="text-xs underline mt-2">Dismiss</button>
+        </div>
+      )}
 
       {/* Inventory table grouped by category */}
       {grouped.length === 0 ? (
