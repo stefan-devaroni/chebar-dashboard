@@ -373,32 +373,13 @@ export function InventoryManager({
             {generatingOrder ? 'Saving...' : `Generate order (${needsOrder.length} items)`}
           </button>
         )}
-        <a
-          href="/api/inventory/export"
-          download
-          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
+        <button
+          onClick={() => router.push('/dashboard/purchasing/bulk-edit')}
+          className="flex items-center gap-1.5 border border-teal-400 text-teal-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-teal-50 transition"
         >
-          <Download size={12} strokeWidth={2} />
-          Export CSV
-        </a>
-        <label className={cn(
-          'flex items-center gap-1.5 border px-3 py-1.5 rounded text-xs uppercase tracking-widest transition cursor-pointer',
-          importing ? 'border-gold bg-gold/10 text-gold' : 'border-teal-400 text-teal-700 hover:bg-teal-50'
-        )}>
-          <Upload size={12} strokeWidth={2} />
-          {importing ? 'Importing...' : 'Import CSV'}
-          <input
-            type="file"
-            accept=".csv"
-            className="hidden"
-            disabled={importing}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleImportCSV(file);
-              e.target.value = '';
-            }}
-          />
-        </label>
+          <Pencil size={12} strokeWidth={2} />
+          Bulk edit suppliers
+        </button>
         <button
           onClick={() => setShowAddSupplier(true)}
           className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
