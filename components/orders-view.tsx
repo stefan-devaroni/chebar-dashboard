@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { Truck, FileText, Check, Clock, Package, ChevronDown, ChevronRight, ClipboardCheck, AlertTriangle } from 'lucide-react';
+import { Truck, FileText, Check, Clock, Package, ChevronDown, ChevronRight, ClipboardCheck, AlertTriangle, Copy, X } from 'lucide-react';
 
 interface OrderItem {
   name: string;
@@ -42,6 +42,9 @@ export function OrdersView({
   // Track which supplier sections are in "checking delivery" mode
   // Key: "orderId:supplierId", value: Set of checked item indices
   const [checking, setChecking] = useState<Record<string, Set<number>>>({});
+  // Missing items alert popup
+  const [missingAlert, setMissingAlert] = useState<{ supplierName: string; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const checkKey = (orderId: string, supplierId: string) => `${orderId}:${supplierId}`;
 
@@ -65,6 +68,49 @@ export function OrdersView({
       return next;
     });
   }, []);
+
+  const receiveWithMissing = useCallback(async (
+    order: PurchaseOrder,
+    supplierId: string,
+    supplierName: string,
+    items: OrderItem[],
+    checkedSet: Set<number>
+  ) => {
+    const missingItems = items.filter((_, idx) => !checkedSet.has(idx));
+
+    // Format missing items text for WhatsApp
+    const date = new Date(order.created_at).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+    let text = `Missing from ${supplierName} delivery (${date}):\n\n`;
+    for (const item of missingItems) {
+      text += `- ${item.toBuy} ${item.unit} ${item.name}`;
+      if (item.unit_size) text += ` (${item.unit_size})`;
+      text += '\n';
+    }
+
+    // Mark this supplier as received
+    updateSupplierStatus(order.id, supplierId, 'received');
+    stopChecking(order.id, supplierId);
+
+    // Create a new draft order with the missing items
+    await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: missingItems }),
+    });
+
+    // Refresh orders
+    const res = await fetch('/api/orders');
+    if (res.ok) {
+      const data = await res.json();
+      setOrders(data);
+    }
+
+    // Show the missing items popup
+    setCopied(false);
+    setMissingAlert({ supplierName, text });
+  }, [stopChecking]);
 
   function getSupplierStatus(order: PurchaseOrder, supplierId: string): string {
     return order.supplier_statuses?.[supplierId] ?? order.status ?? 'draft';
@@ -385,16 +431,23 @@ export function OrdersView({
                         {sStatus === 'sent' && isChecking && (
                           <>
                             <button
-                              onClick={() => { updateSupplierStatus(order.id, supplierId, 'received'); stopChecking(order.id, supplierId); }}
+                              onClick={() => {
+                                if (allChecked) {
+                                  updateSupplierStatus(order.id, supplierId, 'received');
+                                  stopChecking(order.id, supplierId);
+                                } else {
+                                  receiveWithMissing(order, supplierId, supplierName, items, checkedSet!);
+                                }
+                              }}
                               disabled={checkedCount === 0}
                               className={cn(
                                 'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs uppercase tracking-widest transition',
                                 allChecked
                                   ? 'bg-green-600 text-white hover:bg-green-700'
-                                  : 'border border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-40'
+                                  : 'border border-amber-400 text-amber-800 bg-amber-50 hover:bg-amber-100 disabled:opacity-40'
                               )}
                             >
-                              <Check size={12} strokeWidth={2} />
+                              {allChecked ? <Check size={12} strokeWidth={2} /> : <AlertTriangle size={12} strokeWidth={2} />}
                               {allChecked ? 'All received' : `Receive (${missingCount} missing)`}
                             </button>
                             <button
@@ -432,6 +485,42 @@ export function OrdersView({
           </div>
         );
       })}
+
+      {/* Missing items popup */}
+      {missingAlert && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setMissingAlert(null)}>
+          <div className="bg-white rounded-xl w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-amber-500" />
+                <h3 className="font-medium text-sm">Missing items — {missingAlert.supplierName}</h3>
+              </div>
+              <button onClick={() => setMissingAlert(null)} className="text-neutral-400 hover:text-neutral-600 transition">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-xs text-neutral-500 mb-3">
+                These items were not in the delivery. They have been added to a new order. Copy the text below and send it via WhatsApp.
+              </p>
+              <pre className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 text-sm whitespace-pre-wrap font-sans leading-relaxed">
+                {missingAlert.text}
+              </pre>
+              <button
+                onClick={() => { navigator.clipboard.writeText(missingAlert.text); setCopied(true); }}
+                className={cn(
+                  'mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium uppercase tracking-widest transition',
+                  copied
+                    ? 'bg-green-600 text-white'
+                    : 'bg-ink text-cream hover:bg-neutral-800'
+                )}
+              >
+                {copied ? <><Check size={14} strokeWidth={2} /> Copied!</> : <><Copy size={14} strokeWidth={2} /> Copy for WhatsApp</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
