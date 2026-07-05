@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -20,7 +20,8 @@ interface Shift {
   shift_type: 'morning' | 'evening';
 }
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const PRESET_SHIFTS = [
   { label: '7:30–3', start: '07:30', end: '15:00', type: 'morning' as const },
@@ -50,6 +51,14 @@ function formatShortTime(t: string): string {
   return m === '00' ? `${h12}${ampm}` : `${h12}:${m}${ampm}`;
 }
 
+function formatTime(t: string): string {
+  const [h, m] = t.split(':');
+  const hour = parseInt(h);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return m === '00' ? `${h12} ${ampm}` : `${h12}:${m} ${ampm}`;
+}
+
 export function WeeklySchedule({
   initialShifts,
   members: initialMembers,
@@ -75,6 +84,13 @@ export function WeeklySchedule({
   const [newName, setNewName] = useState('');
   const [newDept, setNewDept] = useState<'foh' | 'kitchen'>('foh');
 
+  const [mobileView, setMobileView] = useState<'day' | 'week'>('day');
+  const [dayIndex, setDayIndex] = useState(() => {
+    const today = new Date();
+    const dow = today.getDay();
+    return (dow + 6) % 7; // 0=Mon .. 6=Sun
+  });
+
   const monday = getMonday(weekStart);
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
@@ -97,6 +113,19 @@ export function WeeklySchedule({
       setShifts(data);
     }
     setLoading(false);
+  }
+
+  function navigateDay(delta: number) {
+    const newIdx = dayIndex + delta;
+    if (newIdx < 0) {
+      navigateWeek(-1);
+      setDayIndex(6);
+    } else if (newIdx > 6) {
+      navigateWeek(1);
+      setDayIndex(0);
+    } else {
+      setDayIndex(newIdx);
+    }
   }
 
   async function addShiftToDay(date: string) {
@@ -180,10 +209,75 @@ export function WeeklySchedule({
     setSelectedShift({ start: customStart, end: customEnd, type: type as 'morning' | 'evening' });
   }
 
+  // Day view data
+  const currentDayDate = weekDates[dayIndex];
+  const currentDay = new Date(currentDayDate + 'T00:00:00');
+  const dayShiftsForView = shifts.filter((s) => s.date === currentDayDate);
+  const dayMorning = dayShiftsForView.filter((s) => s.shift_type === 'morning');
+  const dayEvening = dayShiftsForView.filter((s) => s.shift_type === 'evening');
+  const isDayToday = currentDayDate === todayStr;
+
+  function renderShiftRow(s: Shift) {
+    const isKitchen = getMemberDept(s.team_member_id) === 'kitchen';
+    return (
+      <div
+        key={s.id}
+        className={cn(
+          'flex items-center justify-between rounded-lg px-3 py-2',
+          isKitchen ? 'bg-orange-50' : 'bg-blue-50'
+        )}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', isKitchen ? 'bg-orange-400' : 'bg-blue-400')} />
+          <span className={cn('text-sm font-medium truncate', isKitchen ? 'text-orange-700' : 'text-blue-700')}>
+            {getMemberName(s.team_member_id)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={cn('text-xs', isKitchen ? 'text-orange-500' : 'text-blue-500')}>
+            {formatTime(s.start_time)} – {formatTime(s.end_time)}
+          </span>
+          <button
+            onClick={() => removeShift(s.id)}
+            className="text-neutral-300 hover:text-red-500 active:text-red-500 transition"
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      {/* Week navigation */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Mobile view toggle — hidden on desktop */}
+      <div className="flex sm:hidden mb-4">
+        <div className="flex bg-neutral-100 rounded-lg p-0.5 w-full">
+          <button
+            onClick={() => setMobileView('day')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition',
+              mobileView === 'day' ? 'bg-white text-ink shadow-sm' : 'text-neutral-500'
+            )}
+          >
+            <Calendar size={13} strokeWidth={1.5} />
+            Day
+          </button>
+          <button
+            onClick={() => setMobileView('week')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition',
+              mobileView === 'week' ? 'bg-white text-ink shadow-sm' : 'text-neutral-500'
+            )}
+          >
+            <CalendarDays size={13} strokeWidth={1.5} />
+            Week
+          </button>
+        </div>
+      </div>
+
+      {/* Week navigation — always on desktop, only in week view on mobile */}
+      <div className={cn('flex items-center justify-between mb-4', mobileView === 'day' && 'hidden sm:flex')}>
         <button onClick={() => navigateWeek(-1)} className="p-2 rounded hover:bg-white transition shrink-0">
           <ChevronLeft size={18} strokeWidth={1.5} />
         </button>
@@ -208,11 +302,29 @@ export function WeeklySchedule({
         </button>
       </div>
 
+      {/* Day navigation — mobile day view only */}
+      <div className={cn('flex items-center justify-between mb-4 sm:hidden', mobileView !== 'day' && 'hidden')}>
+        <button onClick={() => navigateDay(-1)} className="p-2 rounded hover:bg-white transition shrink-0">
+          <ChevronLeft size={18} strokeWidth={1.5} />
+        </button>
+        <div className="text-center">
+          <h2 className={cn('font-display text-lg', isDayToday && 'text-gold')}>
+            {DAYS_FULL[dayIndex]}
+          </h2>
+          <p className="text-xs text-neutral-400">
+            {currentDay.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+        <button onClick={() => navigateDay(1)} className="p-2 rounded hover:bg-white transition shrink-0">
+          <ChevronRight size={18} strokeWidth={1.5} />
+        </button>
+      </div>
+
       {/* Assignment hint */}
       {readyToAssign && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 text-xs sm:text-sm text-blue-800 flex items-center gap-2">
           <span>
-            Tap a day to add <strong>{selectedMember?.name}</strong> to <strong>{formatShortTime(selectedShift!.start)}–{formatShortTime(selectedShift!.end)}</strong>
+            Tap {mobileView === 'day' ? '"Add to this day"' : 'a day'} to add <strong>{selectedMember?.name}</strong> to <strong>{formatShortTime(selectedShift!.start)}–{formatShortTime(selectedShift!.end)}</strong>
           </span>
           <button
             onClick={() => { setSelectedMemberId(null); setSelectedShift(null); }}
@@ -223,8 +335,86 @@ export function WeeklySchedule({
         </div>
       )}
 
-      {/* Calendar grid — horizontal scroll on mobile, 7-col grid on desktop */}
-      <div className={cn('transition-opacity', loading && 'opacity-50')}>
+      {/* ===== MOBILE DAY VIEW ===== */}
+      <div className={cn('sm:hidden', mobileView !== 'day' && 'hidden', loading && 'opacity-50')}>
+        <div className={cn(
+          'rounded-xl border p-4',
+          isDayToday ? 'border-gold/60 bg-gold/5 ring-1 ring-gold/20' : 'border-neutral-200 bg-white'
+        )}>
+          {/* Add to this day button */}
+          {readyToAssign && (
+            <button
+              onClick={() => addShiftToDay(currentDayDate)}
+              className="w-full mb-3 py-2.5 bg-blue-500 text-white rounded-lg text-xs font-medium uppercase tracking-widest active:bg-blue-600 transition"
+            >
+              Add {selectedMember?.name} to this day
+            </button>
+          )}
+
+          {dayShiftsForView.length === 0 && (
+            <p className="text-sm text-neutral-400 italic text-center py-6">No shifts scheduled</p>
+          )}
+
+          {/* Morning */}
+          {dayMorning.length > 0 && (
+            <div className="mb-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Sun size={13} className="text-amber-400" />
+                <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">Morning</span>
+              </div>
+              <div className="space-y-1.5">
+                {dayMorning.map(renderShiftRow)}
+              </div>
+            </div>
+          )}
+
+          {/* Divider */}
+          {dayMorning.length > 0 && dayEvening.length > 0 && (
+            <div className="border-t border-dashed border-neutral-200 my-3" />
+          )}
+
+          {/* Evening */}
+          {dayEvening.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Moon size={13} className="text-indigo-400" />
+                <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">Evening</span>
+              </div>
+              <div className="space-y-1.5">
+                {dayEvening.map(renderShiftRow)}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Day dots — quick day switcher */}
+        <div className="flex justify-center gap-1 mt-3">
+          {weekDates.map((date, i) => {
+            const hasShifts = shifts.some((s) => s.date === date);
+            return (
+              <button
+                key={date}
+                onClick={() => setDayIndex(i)}
+                className={cn(
+                  'w-8 h-8 rounded-full text-[10px] font-medium transition flex items-center justify-center',
+                  i === dayIndex
+                    ? 'bg-ink text-cream'
+                    : date === todayStr
+                      ? 'bg-gold/10 text-gold border border-gold/30'
+                      : hasShifts
+                        ? 'bg-neutral-100 text-ink'
+                        : 'text-neutral-400'
+                )}
+              >
+                {DAYS_SHORT[i].charAt(0)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ===== WEEK VIEW (always on desktop, toggle on mobile) ===== */}
+      <div className={cn('transition-opacity', loading && 'opacity-50', mobileView === 'day' ? 'hidden sm:block' : '')}>
         <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {weekDates.map((date, i) => {
             const d = new Date(date + 'T00:00:00');
@@ -245,18 +435,16 @@ export function WeeklySchedule({
                   readyToAssign && 'cursor-pointer hover:ring-2 hover:ring-blue-300 hover:border-blue-300 active:bg-blue-50'
                 )}
               >
-                {/* Day header */}
                 <div className={cn(
                   'px-1 sm:px-3 py-1.5 sm:py-2.5 text-center border-b',
                   isToday ? 'border-gold/20' : 'border-neutral-100'
                 )}>
-                  <p className="text-[8px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest text-neutral-400">{DAYS[i]}</p>
+                  <p className="text-[8px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest text-neutral-400">{DAYS_SHORT[i]}</p>
                   <p className={cn('text-sm sm:text-lg font-display', isToday ? 'text-gold' : 'text-ink')}>
                     {d.getDate()}
                   </p>
                 </div>
 
-                {/* Scheduled shifts */}
                 <div className="px-0.5 sm:px-2 py-1 sm:py-2 flex-1 min-h-[48px] sm:min-h-[80px]">
                   {dayShifts.length === 0 && !readyToAssign && (
                     <p className="text-[8px] sm:text-[10px] text-neutral-300 italic text-center mt-2 sm:mt-4">—</p>
@@ -428,7 +616,6 @@ export function WeeklySchedule({
         <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-500 font-medium mb-2 sm:mb-3">2. Select shift</h3>
 
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-2 sm:mb-3">
-          {/* Morning */}
           <div className="col-span-3 flex items-center gap-1.5 mb-0.5">
             <Sun size={11} className="text-amber-500" />
             <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400">Morning</span>
@@ -451,7 +638,6 @@ export function WeeklySchedule({
             );
           })}
 
-          {/* Evening */}
           <div className="col-span-3 flex items-center gap-1.5 mt-1.5 sm:mt-2 mb-0.5">
             <Moon size={11} className="text-indigo-400" />
             <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400">Evening</span>
@@ -474,7 +660,6 @@ export function WeeklySchedule({
             );
           })}
 
-          {/* Custom */}
           <div className="col-span-3 mt-1.5 sm:mt-2">
             {!customMode ? (
               <button
@@ -523,7 +708,7 @@ export function WeeklySchedule({
       {readyToAssign && (
         <div className="mt-2 sm:mt-3 text-center">
           <p className="text-[11px] sm:text-xs text-neutral-500">
-            3. Tap a day above to assign <strong>{selectedMember?.name}</strong>
+            3. {mobileView === 'day' ? <>Tap &quot;Add to this day&quot; above</> : <>Tap a day above</>} to assign <strong>{selectedMember?.name}</strong>
           </p>
         </div>
       )}
