@@ -75,6 +75,7 @@ export function WeeklySchedule({
 
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [selectedShift, setSelectedShift] = useState<{ start: string; end: string; type: 'morning' | 'evening' } | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [customMode, setCustomMode] = useState(false);
   const [customStart, setCustomStart] = useState('07:30');
   const [customEnd, setCustomEnd] = useState('15:00');
@@ -128,23 +129,47 @@ export function WeeklySchedule({
     }
   }
 
-  async function addShiftToDay(date: string) {
-    if (!selectedMemberId || !selectedShift) return;
-
+  async function createShift(memberId: string, date: string, shift: { start: string; end: string; type: 'morning' | 'evening' }) {
     const res = await fetch('/api/shifts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        team_member_id: selectedMemberId,
+        team_member_id: memberId,
         date,
-        start_time: selectedShift.start,
-        end_time: selectedShift.end,
-        shift_type: selectedShift.type,
+        start_time: shift.start,
+        end_time: shift.end,
+        shift_type: shift.type,
       }),
     });
     if (res.ok) {
-      const shift = await res.json();
-      setShifts((prev) => [...prev, shift]);
+      const newShift = await res.json();
+      setShifts((prev) => [...prev, newShift]);
+    }
+  }
+
+  function handleSelectDate(date: string) {
+    if (selectedMemberId && selectedShift) {
+      createShift(selectedMemberId, date, selectedShift);
+    } else {
+      setSelectedDate(selectedDate === date ? null : date);
+    }
+  }
+
+  function handleSelectMember(id: string) {
+    const newId = selectedMemberId === id ? null : id;
+    setSelectedMemberId(newId);
+    if (newId && selectedShift && selectedDate) {
+      createShift(newId, selectedDate, selectedShift);
+      setSelectedDate(null);
+    }
+  }
+
+  function handleSelectShift(shift: { start: string; end: string; type: 'morning' | 'evening' }) {
+    setSelectedShift(shift);
+    setCustomMode(false);
+    if (selectedMemberId && selectedDate) {
+      createShift(selectedMemberId, selectedDate, shift);
+      setSelectedDate(null);
     }
   }
 
@@ -205,14 +230,13 @@ export function WeeklySchedule({
   }
 
   function selectPresetShift(preset: typeof PRESET_SHIFTS[0]) {
-    setSelectedShift({ start: preset.start, end: preset.end, type: preset.type });
-    setCustomMode(false);
+    handleSelectShift({ start: preset.start, end: preset.end, type: preset.type });
   }
 
   function applyCustomShift() {
     const hour = parseInt(customStart.split(':')[0]);
     const type = hour < 15 ? 'morning' : 'evening';
-    setSelectedShift({ start: customStart, end: customEnd, type: type as 'morning' | 'evening' });
+    handleSelectShift({ start: customStart, end: customEnd, type: type as 'morning' | 'evening' });
   }
 
   // Day view data
@@ -338,7 +362,22 @@ export function WeeklySchedule({
             Tap {view === 'day' ? '"Add to this day"' : 'a day'} to add <strong>{selectedMember?.name}</strong> to <strong>{formatShortTime(selectedShift!.start)}–{formatShortTime(selectedShift!.end)}</strong>
           </span>
           <button
-            onClick={() => { setSelectedMemberId(null); setSelectedShift(null); }}
+            onClick={() => { setSelectedMemberId(null); setSelectedShift(null); setSelectedDate(null); }}
+            className="ml-auto text-blue-500 hover:text-blue-700 text-[10px] uppercase tracking-widest shrink-0"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {selectedDate && !readyToAssign && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 text-xs sm:text-sm text-blue-800 flex items-center gap-2">
+          <span>
+            <strong>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</strong> selected
+            {selectedMemberId && !selectedShift && ' — now pick a shift'}
+            {!selectedMemberId && ' — now pick a team member'}
+          </span>
+          <button
+            onClick={() => { setSelectedMemberId(null); setSelectedShift(null); setSelectedDate(null); }}
             className="ml-auto text-blue-500 hover:text-blue-700 text-[10px] uppercase tracking-widest shrink-0"
           >
             Cancel
@@ -356,7 +395,7 @@ export function WeeklySchedule({
           {/* Add to this day button */}
           {readyToAssign && (
             <button
-              onClick={() => addShiftToDay(currentDayDate)}
+              onClick={() => handleSelectDate(currentDayDate)}
               className="w-full mb-3 py-2.5 bg-blue-500 text-white rounded-lg text-xs font-medium uppercase tracking-widest active:bg-blue-600 transition"
             >
               Add {selectedMember?.name} to this day
@@ -437,33 +476,45 @@ export function WeeklySchedule({
             const morningShifts = dayShifts.filter((s) => s.shift_type === 'morning').sort(sortByDept);
             const eveningShifts = dayShifts.filter((s) => s.shift_type === 'evening').sort(sortByDept);
 
+            const isDateSelected = selectedDate === date;
             return (
               <div
                 key={date}
-                onClick={() => readyToAssign && addShiftToDay(date)}
                 className={cn(
                   'rounded-lg sm:rounded-xl border flex flex-col transition min-w-0',
-                  isToday
-                    ? 'border-gold/60 bg-gold/5 ring-1 ring-gold/20'
-                    : 'border-neutral-200 bg-white',
-                  readyToAssign && 'cursor-pointer hover:ring-2 hover:ring-blue-300 hover:border-blue-300 active:bg-blue-50'
+                  isDateSelected
+                    ? 'border-blue-400 bg-blue-50/50 ring-2 ring-blue-300'
+                    : isToday
+                      ? 'border-gold/60 bg-gold/5 ring-1 ring-gold/20'
+                      : 'border-neutral-200 bg-white',
                 )}
               >
-                <div className={cn(
-                  'px-1 sm:px-3 py-1.5 sm:py-2.5 text-center border-b',
-                  isToday ? 'border-gold/20' : 'border-neutral-100'
-                )}>
+                {/* Day header — click to switch to day view */}
+                <div
+                  onClick={() => { setDayIndex(i); setView('day'); }}
+                  className={cn(
+                    'px-1 sm:px-3 py-1.5 sm:py-2.5 text-center border-b cursor-pointer hover:bg-neutral-50 transition',
+                    isToday ? 'border-gold/20' : 'border-neutral-100'
+                  )}
+                >
                   <p className="text-[8px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest text-neutral-400">{DAYS_SHORT[i]}</p>
                   <p className={cn('text-sm sm:text-lg font-display', isToday ? 'text-gold' : 'text-ink')}>
                     {d.getDate()}
                   </p>
                 </div>
 
-                <div className="px-0.5 sm:px-2 py-1 sm:py-2 flex-1 min-h-[48px] sm:min-h-[80px]">
-                  {dayShifts.length === 0 && !readyToAssign && (
+                {/* Shift area — click to select date or assign */}
+                <div
+                  onClick={() => handleSelectDate(date)}
+                  className={cn(
+                    'px-0.5 sm:px-2 py-1 sm:py-2 flex-1 min-h-[48px] sm:min-h-[80px] cursor-pointer transition',
+                    !isDateSelected && 'hover:bg-neutral-50/50 active:bg-blue-50'
+                  )}
+                >
+                  {dayShifts.length === 0 && !selectedDate && !readyToAssign && (
                     <p className="text-[8px] sm:text-[10px] text-neutral-300 italic text-center mt-2 sm:mt-4">—</p>
                   )}
-                  {dayShifts.length === 0 && readyToAssign && (
+                  {dayShifts.length === 0 && (selectedDate || readyToAssign) && (
                     <p className="text-[8px] sm:text-[10px] text-blue-300 text-center mt-2 sm:mt-4">+</p>
                   )}
 
@@ -543,7 +594,7 @@ export function WeeklySchedule({
           <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-500 font-medium">1. Select team member</h3>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => { setRemoveMode(!removeMode); setSelectedMemberId(null); setSelectedShift(null); }}
+              onClick={() => { setRemoveMode(!removeMode); setSelectedMemberId(null); setSelectedShift(null); setSelectedDate(null); }}
               className={cn(
                 'flex items-center gap-1 text-[10px] uppercase tracking-widest transition',
                 removeMode ? 'text-red-500' : 'text-neutral-400 hover:text-red-400'
@@ -576,7 +627,7 @@ export function WeeklySchedule({
               {fohMembers.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => removeMode ? removeMember(m.id) : setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
+                  onClick={() => removeMode ? removeMember(m.id) : handleSelectMember(m.id)}
                   className={cn(
                     'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium flex items-center gap-1',
                     removeMode
@@ -604,7 +655,7 @@ export function WeeklySchedule({
               {kitchenMembers.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => removeMode ? removeMember(m.id) : setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
+                  onClick={() => removeMode ? removeMember(m.id) : handleSelectMember(m.id)}
                   className={cn(
                     'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium flex items-center gap-1',
                     removeMode
