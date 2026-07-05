@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar, AlertTriangle } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -247,6 +247,121 @@ export function WeeklySchedule({
   const dayEvening = dayShiftsForView.filter((s) => s.shift_type === 'evening').sort(sortByDept);
   const isDayToday = currentDayDate === todayStr;
 
+  // Monthly Sunday shifts for the "one Sunday off per month" check
+  const [monthlySundayShifts, setMonthlySundayShifts] = useState<Shift[]>([]);
+  const currentMonth = monday.getMonth();
+  const currentYear = monday.getFullYear();
+
+  useEffect(() => {
+    const firstOfMonth = new Date(currentYear, currentMonth, 1);
+    const lastOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const monthStart = formatDate(firstOfMonth);
+    const monthEnd = formatDate(lastOfMonth);
+    // Find all Sundays in this month
+    fetch(`/api/shifts?weekStart=${monthStart}&weekEnd=${monthEnd}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((allShifts: Shift[]) => {
+        const sundays: string[] = [];
+        const d = new Date(firstOfMonth);
+        while (d <= lastOfMonth) {
+          if (d.getDay() === 0) sundays.push(formatDate(d));
+          d.setDate(d.getDate() + 1);
+        }
+        setMonthlySundayShifts(allShifts.filter((s: Shift) => sundays.includes(s.date)));
+      })
+      .catch(() => {});
+  }, [currentMonth, currentYear]);
+
+  // Schedule warnings
+  interface Warning {
+    type: 'overlap' | 'hours' | 'no-day-off' | 'sunday';
+    severity: 'error' | 'warn';
+    message: string;
+  }
+
+  const warnings = useMemo<Warning[]>(() => {
+    const w: Warning[] = [];
+    const activeMembers = members.filter(m => m.active !== false);
+
+    function timeToMin(t: string) {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    }
+
+    for (const member of activeMembers) {
+      const memberShifts = shifts.filter(s => s.team_member_id === member.id);
+
+      // 1. Overlapping shifts on same day
+      const byDate: Record<string, Shift[]> = {};
+      for (const s of memberShifts) {
+        (byDate[s.date] ??= []).push(s);
+      }
+      for (const [date, dayS] of Object.entries(byDate)) {
+        for (let i = 0; i < dayS.length; i++) {
+          for (let j = i + 1; j < dayS.length; j++) {
+            const a = dayS[i], b = dayS[j];
+            if (timeToMin(a.start_time) < timeToMin(b.end_time) && timeToMin(b.start_time) < timeToMin(a.end_time)) {
+              const d = new Date(date + 'T00:00:00');
+              w.push({
+                type: 'overlap',
+                severity: 'error',
+                message: `${member.name} has overlapping shifts on ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+              });
+            }
+          }
+        }
+      }
+
+      // 2. Over 45 hours/week
+      let totalMin = 0;
+      for (const s of memberShifts) {
+        totalMin += timeToMin(s.end_time) - timeToMin(s.start_time);
+      }
+      const totalHrs = Math.round(totalMin / 60 * 10) / 10;
+      if (totalHrs > 45) {
+        w.push({
+          type: 'hours',
+          severity: 'warn',
+          message: `${member.name} is at ${totalHrs}h this week (max 45h)`,
+        });
+      }
+
+      // 3. Scheduled 7 days (no day off)
+      const daysWorked = new Set(memberShifts.map(s => s.date));
+      if (daysWorked.size === 7) {
+        w.push({
+          type: 'no-day-off',
+          severity: 'error',
+          message: `${member.name} has no day off this week`,
+        });
+      }
+
+      // 4. No Sunday off this month
+      const firstOfMo = new Date(currentYear, currentMonth, 1);
+      const lastOfMo = new Date(currentYear, currentMonth + 1, 0);
+      const sundaysInMonth: string[] = [];
+      const sd = new Date(firstOfMo);
+      while (sd <= lastOfMo) {
+        if (sd.getDay() === 0) sundaysInMonth.push(formatDate(sd));
+        sd.setDate(sd.getDate() + 1);
+      }
+      if (sundaysInMonth.length > 0) {
+        const sundayShiftsForMember = monthlySundayShifts.filter(s => s.team_member_id === member.id);
+        const sundaysWorked = new Set(sundayShiftsForMember.map(s => s.date));
+        if (sundaysWorked.size === sundaysInMonth.length) {
+          const monthName = firstOfMo.toLocaleDateString('en-US', { month: 'long' });
+          w.push({
+            type: 'sunday',
+            severity: 'error',
+            message: `${member.name} has no Sunday off in ${monthName}`,
+          });
+        }
+      }
+    }
+
+    return w;
+  }, [shifts, members, monthlySundayShifts, currentMonth, currentYear]);
+
   function renderShiftRow(s: Shift) {
     const isKitchen = getMemberDept(s.team_member_id) === 'kitchen';
     return (
@@ -352,6 +467,26 @@ export function WeeklySchedule({
           <button onClick={() => navigateDay(1)} className="p-2 rounded hover:bg-white transition shrink-0">
             <ChevronRight size={18} strokeWidth={1.5} />
           </button>
+        </div>
+      )}
+
+      {/* Schedule warnings */}
+      {warnings.length > 0 && (
+        <div className="space-y-1.5 mb-3">
+          {warnings.map((w, i) => (
+            <div
+              key={i}
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm',
+                w.severity === 'error'
+                  ? 'bg-red-50 border border-red-200 text-red-800'
+                  : 'bg-amber-50 border border-amber-200 text-amber-800'
+              )}
+            >
+              <AlertTriangle size={14} className={cn('shrink-0', w.severity === 'error' ? 'text-red-500' : 'text-amber-500')} />
+              <span>{w.message}</span>
+            </div>
+          ))}
         </div>
       )}
 

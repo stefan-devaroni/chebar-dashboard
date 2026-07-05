@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   const supabase = createClient();
   const weekStart = request.nextUrl.searchParams.get('weekStart');
+  const weekEnd = request.nextUrl.searchParams.get('weekEnd');
 
   let query = supabase
     .from('shifts')
@@ -12,11 +13,14 @@ export async function GET(request: NextRequest) {
 
   if (weekStart) {
     const start = new Date(weekStart);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    query = query
-      .gte('date', start.toISOString().split('T')[0])
-      .lte('date', end.toISOString().split('T')[0]);
+    query = query.gte('date', start.toISOString().split('T')[0]);
+    if (weekEnd) {
+      query = query.lte('date', new Date(weekEnd).toISOString().split('T')[0]);
+    } else {
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      query = query.lte('date', end.toISOString().split('T')[0]);
+    }
   }
 
   const { data, error } = await query;
