@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, UserPlus, X, Sun, Moon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, X, Sun, Moon, Clock } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -15,10 +15,21 @@ interface Shift {
   id: string;
   team_member_id: string;
   date: string;
+  start_time: string;
+  end_time: string;
   shift_type: 'morning' | 'evening';
 }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const PRESET_SHIFTS = [
+  { label: '7:30–3', start: '07:30', end: '15:00', type: 'morning' as const },
+  { label: '8–3', start: '08:00', end: '15:00', type: 'morning' as const },
+  { label: '9–1', start: '09:00', end: '13:00', type: 'morning' as const },
+  { label: '3–11', start: '15:00', end: '23:00', type: 'evening' as const },
+  { label: '5–11', start: '17:00', end: '23:00', type: 'evening' as const },
+  { label: '6–11', start: '18:00', end: '23:00', type: 'evening' as const },
+];
 
 function getMonday(dateStr: string): Date {
   const d = new Date(dateStr + 'T00:00:00');
@@ -29,6 +40,14 @@ function getMonday(dateStr: string): Date {
 
 function formatDate(d: Date): string {
   return d.toISOString().split('T')[0];
+}
+
+function formatShortTime(t: string): string {
+  const [h, m] = t.split(':');
+  const hour = parseInt(h);
+  const ampm = hour >= 12 ? 'p' : 'a';
+  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return m === '00' ? `${h12}${ampm}` : `${h12}:${m}${ampm}`;
 }
 
 export function WeeklySchedule({
@@ -44,6 +63,13 @@ export function WeeklySchedule({
   const [members, setMembers] = useState<TeamMember[]>(initialMembers);
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [loading, setLoading] = useState(false);
+
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [selectedShift, setSelectedShift] = useState<{ start: string; end: string; type: 'morning' | 'evening' } | null>(null);
+  const [customMode, setCustomMode] = useState(false);
+  const [customStart, setCustomStart] = useState('07:30');
+  const [customEnd, setCustomEnd] = useState('15:00');
+
   const [showAddMember, setShowAddMember] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDept, setNewDept] = useState<'foh' | 'kitchen'>('foh');
@@ -55,7 +81,7 @@ export function WeeklySchedule({
     return formatDate(d);
   });
 
-  const weekLabel = `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — ${new Date(weekDates[6] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const weekLabel = `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — ${new Date(weekDates[6] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 
   async function navigateWeek(delta: number) {
     const newMonday = new Date(monday);
@@ -72,38 +98,34 @@ export function WeeklySchedule({
     setLoading(false);
   }
 
-  const toggleShift = useCallback(async (memberId: string, date: string, shiftType: 'morning' | 'evening') => {
-    const existing = shifts.find(
-      (s) => s.team_member_id === memberId && s.date === date && s.shift_type === shiftType
-    );
+  async function addShiftToDay(date: string) {
+    if (!selectedMemberId || !selectedShift) return;
 
-    if (existing) {
-      setShifts((prev) => prev.filter((s) => s.id !== existing.id));
-      await fetch('/api/shifts', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: existing.id }),
-      });
-    } else {
-      const startTime = shiftType === 'morning' ? '07:30' : '17:00';
-      const endTime = shiftType === 'morning' ? '15:00' : '23:00';
-      const res = await fetch('/api/shifts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          team_member_id: memberId,
-          date,
-          start_time: startTime,
-          end_time: endTime,
-          shift_type: shiftType,
-        }),
-      });
-      if (res.ok) {
-        const shift = await res.json();
-        setShifts((prev) => [...prev, shift]);
-      }
+    const res = await fetch('/api/shifts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        team_member_id: selectedMemberId,
+        date,
+        start_time: selectedShift.start,
+        end_time: selectedShift.end,
+        shift_type: selectedShift.type,
+      }),
+    });
+    if (res.ok) {
+      const shift = await res.json();
+      setShifts((prev) => [...prev, shift]);
     }
-  }, [shifts]);
+  }
+
+  async function removeShift(id: string) {
+    setShifts((prev) => prev.filter((s) => s.id !== id));
+    await fetch('/api/shifts', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+  }
 
   async function addMember() {
     if (!newName.trim()) return;
@@ -121,38 +143,40 @@ export function WeeklySchedule({
   }
 
   const todayStr = new Date().toISOString().split('T')[0];
-
   const fohMembers = members.filter((m) => m.department !== 'kitchen');
   const kitchenMembers = members.filter((m) => m.department === 'kitchen');
 
-  function isScheduled(memberId: string, date: string, type: 'morning' | 'evening') {
-    return shifts.some(
-      (s) => s.team_member_id === memberId && s.date === date && s.shift_type === type
-    );
+  const selectedMember = members.find((m) => m.id === selectedMemberId);
+  const readyToAssign = selectedMemberId !== null && selectedShift !== null;
+
+  function getMemberName(memberId: string) {
+    return members.find((m) => m.id === memberId)?.name ?? '?';
   }
 
-  function getScheduledMembers(date: string, type: 'morning' | 'evening', dept: 'foh' | 'kitchen') {
-    const deptMembers = dept === 'kitchen' ? kitchenMembers : fohMembers;
-    return deptMembers.filter((m) => isScheduled(m.id, date, type));
+  function getMemberDept(memberId: string) {
+    return members.find((m) => m.id === memberId)?.department ?? 'foh';
   }
 
-  function getUnscheduledMembers(date: string, type: 'morning' | 'evening', dept: 'foh' | 'kitchen') {
-    const deptMembers = dept === 'kitchen' ? kitchenMembers : fohMembers;
-    return deptMembers.filter((m) => !isScheduled(m.id, date, type));
+  function selectPresetShift(preset: typeof PRESET_SHIFTS[0]) {
+    setSelectedShift({ start: preset.start, end: preset.end, type: preset.type });
+    setCustomMode(false);
+  }
+
+  function applyCustomShift() {
+    const hour = parseInt(customStart.split(':')[0]);
+    const type = hour < 15 ? 'morning' : 'evening';
+    setSelectedShift({ start: customStart, end: customEnd, type: type as 'morning' | 'evening' });
   }
 
   return (
     <div>
       {/* Week navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => navigateWeek(-1)}
-          className="p-2 rounded hover:bg-white transition"
-        >
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => navigateWeek(-1)} className="p-2 rounded hover:bg-white transition shrink-0">
           <ChevronLeft size={18} strokeWidth={1.5} />
         </button>
-        <div className="text-center">
-          <h2 className="font-display text-xl">{weekLabel}</h2>
+        <div className="text-center min-w-0">
+          <h2 className="font-display text-base sm:text-xl truncate">{weekLabel}</h2>
           <button
             onClick={() => {
               const today = new Date();
@@ -162,204 +186,311 @@ export function WeeklySchedule({
               setWeekStart(newStart);
               navigateWeek(0);
             }}
-            className="text-xs text-neutral-500 hover:text-ink transition uppercase tracking-widest mt-1"
+            className="text-[10px] text-neutral-500 hover:text-ink transition uppercase tracking-widest mt-0.5"
           >
             Today
           </button>
         </div>
-        <button
-          onClick={() => navigateWeek(1)}
-          className="p-2 rounded hover:bg-white transition"
-        >
+        <button onClick={() => navigateWeek(1)} className="p-2 rounded hover:bg-white transition shrink-0">
           <ChevronRight size={18} strokeWidth={1.5} />
         </button>
       </div>
 
-      {/* Add team member button */}
-      <div className="flex justify-end mb-4">
-        <button
-          onClick={() => setShowAddMember(true)}
-          className="flex items-center gap-1.5 bg-ink text-cream px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition"
-        >
-          <UserPlus size={12} strokeWidth={2} />
-          Add team member
-        </button>
+      {/* Assignment hint */}
+      {readyToAssign && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 text-xs sm:text-sm text-blue-800 flex items-center gap-2">
+          <span>
+            Tap a day to add <strong>{selectedMember?.name}</strong> to <strong>{formatShortTime(selectedShift!.start)}–{formatShortTime(selectedShift!.end)}</strong>
+          </span>
+          <button
+            onClick={() => { setSelectedMemberId(null); setSelectedShift(null); }}
+            className="ml-auto text-blue-500 hover:text-blue-700 text-[10px] uppercase tracking-widest shrink-0"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Calendar grid — horizontal scroll on mobile, 7-col grid on desktop */}
+      <div className={cn('transition-opacity', loading && 'opacity-50')}>
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
+          {weekDates.map((date, i) => {
+            const d = new Date(date + 'T00:00:00');
+            const isToday = date === todayStr;
+            const dayShifts = shifts.filter((s) => s.date === date);
+            const morningShifts = dayShifts.filter((s) => s.shift_type === 'morning');
+            const eveningShifts = dayShifts.filter((s) => s.shift_type === 'evening');
+
+            return (
+              <div
+                key={date}
+                onClick={() => readyToAssign && addShiftToDay(date)}
+                className={cn(
+                  'rounded-lg sm:rounded-xl border flex flex-col transition min-w-0',
+                  isToday
+                    ? 'border-gold/60 bg-gold/5 ring-1 ring-gold/20'
+                    : 'border-neutral-200 bg-white',
+                  readyToAssign && 'cursor-pointer hover:ring-2 hover:ring-blue-300 hover:border-blue-300 active:bg-blue-50'
+                )}
+              >
+                {/* Day header */}
+                <div className={cn(
+                  'px-1 sm:px-3 py-1.5 sm:py-2.5 text-center border-b',
+                  isToday ? 'border-gold/20' : 'border-neutral-100'
+                )}>
+                  <p className="text-[8px] sm:text-[10px] uppercase tracking-wider sm:tracking-widest text-neutral-400">{DAYS[i]}</p>
+                  <p className={cn('text-sm sm:text-lg font-display', isToday ? 'text-gold' : 'text-ink')}>
+                    {d.getDate()}
+                  </p>
+                </div>
+
+                {/* Scheduled shifts */}
+                <div className="px-0.5 sm:px-2 py-1 sm:py-2 flex-1 min-h-[48px] sm:min-h-[80px]">
+                  {dayShifts.length === 0 && !readyToAssign && (
+                    <p className="text-[8px] sm:text-[10px] text-neutral-300 italic text-center mt-2 sm:mt-4">—</p>
+                  )}
+                  {dayShifts.length === 0 && readyToAssign && (
+                    <p className="text-[8px] sm:text-[10px] text-blue-300 text-center mt-2 sm:mt-4">+</p>
+                  )}
+
+                  {morningShifts.length > 0 && (
+                    <div className="mb-1">
+                      <div className="flex items-center justify-center gap-0.5 mb-0.5">
+                        <Sun size={7} className="text-amber-400 sm:hidden" />
+                        <Sun size={9} className="text-amber-400 hidden sm:block" />
+                      </div>
+                      <div className="space-y-px">
+                        {morningShifts.map((s) => (
+                          <div
+                            key={s.id}
+                            className={cn(
+                              'flex items-center rounded px-0.5 sm:px-1.5 py-px sm:py-0.5 text-[7px] sm:text-[10px] group',
+                              getMemberDept(s.team_member_id) === 'kitchen'
+                                ? 'bg-orange-50 text-orange-700'
+                                : 'bg-blue-50 text-blue-700'
+                            )}
+                          >
+                            <span className="truncate flex-1 leading-tight">{getMemberName(s.team_member_id)}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); removeShift(s.id); }}
+                              className="text-neutral-400 hover:text-red-500 active:text-red-500 transition shrink-0 ml-0.5 sm:opacity-0 sm:group-hover:opacity-100"
+                            >
+                              <X size={8} strokeWidth={2} className="sm:hidden" />
+                              <X size={10} strokeWidth={2} className="hidden sm:block" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {eveningShifts.length > 0 && (
+                    <div>
+                      {morningShifts.length > 0 && <div className="border-t border-dashed border-neutral-100 my-0.5" />}
+                      <div className="flex items-center justify-center gap-0.5 mb-0.5">
+                        <Moon size={7} className="text-indigo-400 sm:hidden" />
+                        <Moon size={9} className="text-indigo-400 hidden sm:block" />
+                      </div>
+                      <div className="space-y-px">
+                        {eveningShifts.map((s) => (
+                          <div
+                            key={s.id}
+                            className={cn(
+                              'flex items-center rounded px-0.5 sm:px-1.5 py-px sm:py-0.5 text-[7px] sm:text-[10px] group',
+                              getMemberDept(s.team_member_id) === 'kitchen'
+                                ? 'bg-orange-50 text-orange-700'
+                                : 'bg-blue-50 text-blue-700'
+                            )}
+                          >
+                            <span className="truncate flex-1 leading-tight">{getMemberName(s.team_member_id)}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); removeShift(s.id); }}
+                              className="text-neutral-400 hover:text-red-500 active:text-red-500 transition shrink-0 ml-0.5 sm:opacity-0 sm:group-hover:opacity-100"
+                            >
+                              <X size={8} strokeWidth={2} className="sm:hidden" />
+                              <X size={10} strokeWidth={2} className="hidden sm:block" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {members.length === 0 ? (
-        <div className="bg-white border border-neutral-200 rounded p-10 text-center">
-          <p className="text-sm text-neutral-500">
-            Add your first team member to start building the schedule.
-          </p>
+      {/* Step 1: Team members */}
+      <div className="mt-4 sm:mt-6 bg-white border border-neutral-200 rounded-xl p-3 sm:p-4">
+        <div className="flex items-center justify-between mb-2 sm:mb-3">
+          <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-500 font-medium">1. Select team member</h3>
+          <button
+            onClick={() => setShowAddMember(true)}
+            className="flex items-center gap-1 text-[10px] text-gold hover:text-gold/80 uppercase tracking-widest transition"
+          >
+            <UserPlus size={10} strokeWidth={2} />
+            Add
+          </button>
         </div>
-      ) : (
-        <div className={cn('transition-opacity', loading && 'opacity-50')}>
-          {/* Day cards — horizontal scroll on mobile, grid on desktop */}
-          <div className="flex gap-2 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-7 pb-2 snap-x snap-mandatory">
-            {weekDates.map((date, i) => {
-              const d = new Date(date + 'T00:00:00');
-              const isToday = date === todayStr;
-              const amFoh = getScheduledMembers(date, 'morning', 'foh');
-              const amKitchen = getScheduledMembers(date, 'morning', 'kitchen');
-              const pmFoh = getScheduledMembers(date, 'evening', 'foh');
-              const pmKitchen = getScheduledMembers(date, 'evening', 'kitchen');
-              const unschedAMFoh = getUnscheduledMembers(date, 'morning', 'foh');
-              const unschedAMKitchen = getUnscheduledMembers(date, 'morning', 'kitchen');
-              const unschedPMFoh = getUnscheduledMembers(date, 'evening', 'foh');
-              const unschedPMKitchen = getUnscheduledMembers(date, 'evening', 'kitchen');
 
-              return (
-                <div
-                  key={date}
+        {fohMembers.length > 0 && (
+          <div className="mb-2.5">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-500" />
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400">Front of House</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {fohMembers.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
                   className={cn(
-                    'min-w-[260px] sm:min-w-0 snap-start rounded-xl border flex flex-col',
-                    isToday
-                      ? 'border-gold/60 bg-gold/5 ring-1 ring-gold/20'
-                      : 'border-neutral-200 bg-white'
+                    'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium',
+                    selectedMemberId === m.id
+                      ? 'bg-blue-500 text-white ring-2 ring-blue-300'
+                      : 'bg-blue-50 text-blue-700 active:bg-blue-100'
                   )}
                 >
-                  {/* Day header */}
-                  <div className={cn(
-                    'px-3 py-2.5 text-center border-b',
-                    isToday ? 'border-gold/20' : 'border-neutral-100'
-                  )}>
-                    <p className="text-[10px] uppercase tracking-widest text-neutral-400">{DAYS[i]}</p>
-                    <p className={cn(
-                      'text-lg font-display',
-                      isToday ? 'text-gold' : 'text-ink'
-                    )}>
-                      {d.getDate()}
-                    </p>
-                  </div>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-                  {/* AM section */}
-                  <div className="px-2.5 pt-2.5 pb-2">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Sun size={11} className="text-amber-500" />
-                      <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">AM</span>
-                      <span className="text-[10px] text-neutral-300 ml-auto">{amFoh.length + amKitchen.length}</span>
-                    </div>
+        {kitchenMembers.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-orange-500" />
+              <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400">Kitchen</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {kitchenMembers.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
+                  className={cn(
+                    'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium',
+                    selectedMemberId === m.id
+                      ? 'bg-orange-500 text-white ring-2 ring-orange-300'
+                      : 'bg-orange-50 text-orange-700 active:bg-orange-100'
+                  )}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
-                    {/* Scheduled staff */}
-                    <div className="flex flex-wrap gap-1 mb-1">
-                      {amFoh.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'morning')}
-                          className="text-[11px] px-2 py-0.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                      {amKitchen.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'morning')}
-                          className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                    </div>
+      {/* Step 2: Select shift */}
+      <div className={cn(
+        'mt-2 sm:mt-3 bg-white border border-neutral-200 rounded-xl p-3 sm:p-4 transition-opacity',
+        !selectedMemberId && 'opacity-40 pointer-events-none'
+      )}>
+        <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-500 font-medium mb-2 sm:mb-3">2. Select shift</h3>
 
-                    {/* Unscheduled staff — dimmed, tap to add */}
-                    <div className="flex flex-wrap gap-1">
-                      {unschedAMFoh.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'morning')}
-                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-blue-200 text-blue-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                      {unschedAMKitchen.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'morning')}
-                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-orange-200 text-orange-300 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+          {/* Morning */}
+          <div className="col-span-3 flex items-center gap-1.5 mb-0.5">
+            <Sun size={11} className="text-amber-500" />
+            <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400">Morning</span>
+          </div>
+          {PRESET_SHIFTS.filter(s => s.type === 'morning').map((preset) => {
+            const isSelected = selectedShift?.start === preset.start && selectedShift?.end === preset.end;
+            return (
+              <button
+                key={preset.start + preset.end}
+                onClick={() => selectPresetShift(preset)}
+                className={cn(
+                  'py-2 sm:py-2.5 px-1 sm:px-3 rounded-lg text-[11px] sm:text-xs font-medium transition text-center',
+                  isSelected
+                    ? 'bg-ink text-cream ring-2 ring-neutral-400'
+                    : 'border border-neutral-200 active:bg-neutral-100'
+                )}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
 
-                  {/* Divider */}
-                  <div className="mx-2.5 border-t border-dashed border-neutral-200" />
+          {/* Evening */}
+          <div className="col-span-3 flex items-center gap-1.5 mt-1.5 sm:mt-2 mb-0.5">
+            <Moon size={11} className="text-indigo-400" />
+            <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-neutral-400">Evening</span>
+          </div>
+          {PRESET_SHIFTS.filter(s => s.type === 'evening').map((preset) => {
+            const isSelected = selectedShift?.start === preset.start && selectedShift?.end === preset.end;
+            return (
+              <button
+                key={preset.start + preset.end}
+                onClick={() => selectPresetShift(preset)}
+                className={cn(
+                  'py-2 sm:py-2.5 px-1 sm:px-3 rounded-lg text-[11px] sm:text-xs font-medium transition text-center',
+                  isSelected
+                    ? 'bg-ink text-cream ring-2 ring-neutral-400'
+                    : 'border border-neutral-200 active:bg-neutral-100'
+                )}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
 
-                  {/* PM section */}
-                  <div className="px-2.5 pt-2 pb-2.5">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Moon size={11} className="text-indigo-400" />
-                      <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">PM</span>
-                      <span className="text-[10px] text-neutral-300 ml-auto">{pmFoh.length + pmKitchen.length}</span>
-                    </div>
-
-                    {/* Scheduled staff */}
-                    <div className="flex flex-wrap gap-1 mb-1">
-                      {pmFoh.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'evening')}
-                          className="text-[11px] px-2 py-0.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                      {pmKitchen.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'evening')}
-                          className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500 text-white hover:bg-orange-600 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Unscheduled staff — dimmed, tap to add */}
-                    <div className="flex flex-wrap gap-1">
-                      {unschedPMFoh.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'evening')}
-                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-blue-200 text-blue-300 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                      {unschedPMKitchen.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => toggleShift(m.id, date, 'evening')}
-                          className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-orange-200 text-orange-300 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 transition"
-                        >
-                          {m.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+          {/* Custom */}
+          <div className="col-span-3 mt-1.5 sm:mt-2">
+            {!customMode ? (
+              <button
+                onClick={() => setCustomMode(true)}
+                className="flex items-center gap-1.5 text-[11px] sm:text-xs text-neutral-500 hover:text-ink transition"
+              >
+                <Clock size={12} strokeWidth={1.5} />
+                Custom shift
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="time"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="px-2 py-1.5 bg-white border border-neutral-200 rounded text-xs focus:outline-none focus:border-gold w-[100px]"
+                />
+                <span className="text-xs text-neutral-400">to</span>
+                <input
+                  type="time"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="px-2 py-1.5 bg-white border border-neutral-200 rounded text-xs focus:outline-none focus:border-gold w-[100px]"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={applyCustomShift}
+                    className="px-3 py-1.5 bg-ink text-cream rounded text-[10px] uppercase tracking-widest hover:bg-neutral-800 transition"
+                  >
+                    Set
+                  </button>
+                  <button
+                    onClick={() => setCustomMode(false)}
+                    className="p-1.5 text-neutral-400 hover:text-ink transition"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
+        </div>
+      </div>
 
-          {/* Legend */}
-          <div className="flex items-center justify-center gap-6 mt-4 text-[10px] text-neutral-400">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-blue-500" />
-              <span className="uppercase tracking-widest">FOH</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-orange-500" />
-              <span className="uppercase tracking-widest">Kitchen</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-3 rounded-full border border-dashed border-neutral-300" />
-              <span className="uppercase tracking-widest">Tap to add</span>
-            </div>
-          </div>
+      {/* Step 3 hint */}
+      {readyToAssign && (
+        <div className="mt-2 sm:mt-3 text-center">
+          <p className="text-[11px] sm:text-xs text-neutral-500">
+            3. Tap a day above to assign <strong>{selectedMember?.name}</strong>
+          </p>
         </div>
       )}
 
@@ -376,7 +507,6 @@ export function WeeklySchedule({
                 <X size={18} strokeWidth={1.5} />
               </button>
             </div>
-
             <div className="space-y-4">
               <div>
                 <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Name</label>
@@ -390,7 +520,6 @@ export function WeeklySchedule({
                   onKeyDown={(e) => e.key === 'Enter' && addMember()}
                 />
               </div>
-
               <div>
                 <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Department</label>
                 <div className="flex gap-2">
@@ -414,7 +543,6 @@ export function WeeklySchedule({
                   </button>
                 </div>
               </div>
-
               <div className="flex gap-3 pt-1">
                 <button
                   onClick={addMember}
