@@ -198,6 +198,12 @@ export function WeeklySchedule({
     return members.find((m) => m.id === memberId)?.department ?? 'foh';
   }
 
+  function sortByDept(a: Shift, b: Shift) {
+    const dA = getMemberDept(a.team_member_id) === 'kitchen' ? 1 : 0;
+    const dB = getMemberDept(b.team_member_id) === 'kitchen' ? 1 : 0;
+    return dA - dB;
+  }
+
   function selectPresetShift(preset: typeof PRESET_SHIFTS[0]) {
     setSelectedShift({ start: preset.start, end: preset.end, type: preset.type });
     setCustomMode(false);
@@ -213,8 +219,8 @@ export function WeeklySchedule({
   const currentDayDate = weekDates[dayIndex];
   const currentDay = new Date(currentDayDate + 'T00:00:00');
   const dayShiftsForView = shifts.filter((s) => s.date === currentDayDate);
-  const dayMorning = dayShiftsForView.filter((s) => s.shift_type === 'morning');
-  const dayEvening = dayShiftsForView.filter((s) => s.shift_type === 'evening');
+  const dayMorning = dayShiftsForView.filter((s) => s.shift_type === 'morning').sort(sortByDept);
+  const dayEvening = dayShiftsForView.filter((s) => s.shift_type === 'evening').sort(sortByDept);
   const isDayToday = currentDayDate === todayStr;
 
   function renderShiftRow(s: Shift) {
@@ -420,8 +426,8 @@ export function WeeklySchedule({
             const d = new Date(date + 'T00:00:00');
             const isToday = date === todayStr;
             const dayShifts = shifts.filter((s) => s.date === date);
-            const morningShifts = dayShifts.filter((s) => s.shift_type === 'morning');
-            const eveningShifts = dayShifts.filter((s) => s.shift_type === 'evening');
+            const morningShifts = dayShifts.filter((s) => s.shift_type === 'morning').sort(sortByDept);
+            const eveningShifts = dayShifts.filter((s) => s.shift_type === 'evening').sort(sortByDept);
 
             return (
               <div
