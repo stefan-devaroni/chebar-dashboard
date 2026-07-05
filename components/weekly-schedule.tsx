@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar, AlertTriangle, Copy, Check, CalendarOff, Trash2 } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -18,6 +18,15 @@ interface Shift {
   start_time: string;
   end_time: string;
   shift_type: 'morning' | 'evening';
+}
+
+interface TimeOff {
+  id: string;
+  team_member_id: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  status: 'requested' | 'approved' | 'denied';
 }
 
 const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -92,6 +101,26 @@ export function WeeklySchedule({
     return (dow + 6) % 7; // 0=Mon .. 6=Sun
   });
 
+  const [copied, setCopied] = useState(false);
+  const [copyingWeek, setCopyingWeek] = useState(false);
+  const [showTimeOff, setShowTimeOff] = useState(false);
+  const [timeOff, setTimeOff] = useState<TimeOff[]>([]);
+  const [timeOffUnavailable, setTimeOffUnavailable] = useState(false);
+  const [toMemberId, setToMemberId] = useState('');
+  const [toStart, setToStart] = useState('');
+  const [toEnd, setToEnd] = useState('');
+  const [toReason, setToReason] = useState('');
+
+  useEffect(() => {
+    fetch('/api/time-off')
+      .then(async (r) => {
+        if (!r.ok) { setTimeOffUnavailable(true); return []; }
+        return r.json();
+      })
+      .then((data) => Array.isArray(data) && setTimeOff(data))
+      .catch(() => setTimeOffUnavailable(true));
+  }, []);
+
   const monday = getMonday(weekStart);
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
@@ -130,6 +159,10 @@ export function WeeklySchedule({
   }
 
   async function createShift(memberId: string, date: string, shift: { start: string; end: string; type: 'morning' | 'evening' }) {
+    if (isOnTimeOff(memberId, date)) {
+      const name = members.find((m) => m.id === memberId)?.name ?? 'This person';
+      if (!confirm(`${name} has time off on this date. Schedule anyway?`)) return;
+    }
     const res = await fetch('/api/shifts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -145,6 +178,102 @@ export function WeeklySchedule({
       const newShift = await res.json();
       setShifts((prev) => [...prev, newShift]);
     }
+  }
+
+  async function copyLastWeek() {
+    setCopyingWeek(true);
+    const prevMonday = new Date(monday);
+    prevMonday.setDate(monday.getDate() - 7);
+    const res = await fetch(`/api/shifts?weekStart=${formatDate(prevMonday)}`);
+    if (res.ok) {
+      const prevShifts: Shift[] = await res.json();
+      if (prevShifts.length === 0) {
+        alert('Last week has no shifts to copy.');
+      } else {
+        const existing = new Set(shifts.map((s) => `${s.team_member_id}|${s.date}|${s.start_time}|${s.end_time}`));
+        const fresh = prevShifts
+          .map((s) => {
+            const d = new Date(s.date + 'T00:00:00');
+            d.setDate(d.getDate() + 7);
+            return {
+              team_member_id: s.team_member_id,
+              date: formatDate(d),
+              start_time: s.start_time,
+              end_time: s.end_time,
+              shift_type: s.shift_type,
+            };
+          })
+          .filter((s) => !existing.has(`${s.team_member_id}|${s.date}|${s.start_time}|${s.end_time}`));
+        if (fresh.length === 0) {
+          alert('Everything from last week is already on this week’s schedule.');
+        } else {
+          const postRes = await fetch('/api/shifts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shifts: fresh }),
+          });
+          if (postRes.ok) {
+            const created = await postRes.json();
+            setShifts((prev) => [...prev, ...created]);
+          }
+        }
+      }
+    }
+    setCopyingWeek(false);
+  }
+
+  function copyScheduleText() {
+    let text = `Che Bar — Schedule ${weekLabel}\n`;
+    weekDates.forEach((date, i) => {
+      const dayShifts = shifts.filter((s) => s.date === date);
+      if (dayShifts.length === 0) return;
+      const d = new Date(date + 'T00:00:00');
+      text += `\n*${DAYS_FULL[i]} ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}*\n`;
+      const am = dayShifts.filter((s) => s.shift_type === 'morning').sort(sortByDept);
+      const pm = dayShifts.filter((s) => s.shift_type === 'evening').sort(sortByDept);
+      if (am.length > 0) {
+        text += `AM: ${am.map((s) => `${getMemberName(s.team_member_id)} (${formatShortTime(s.start_time)}–${formatShortTime(s.end_time)})`).join(', ')}\n`;
+      }
+      if (pm.length > 0) {
+        text += `PM: ${pm.map((s) => `${getMemberName(s.team_member_id)} (${formatShortTime(s.start_time)}–${formatShortTime(s.end_time)})`).join(', ')}\n`;
+      }
+    });
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function addTimeOff() {
+    if (!toMemberId || !toStart || !toEnd) return;
+    const res = await fetch('/api/time-off', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        team_member_id: toMemberId,
+        start_date: toStart,
+        end_date: toEnd < toStart ? toStart : toEnd,
+        reason: toReason.trim() || null,
+      }),
+    });
+    if (res.ok) {
+      const created = await res.json();
+      setTimeOff((prev) => [created, ...prev]);
+      setToMemberId('');
+      setToStart('');
+      setToEnd('');
+      setToReason('');
+    } else {
+      setTimeOffUnavailable(true);
+    }
+  }
+
+  async function removeTimeOff(id: string) {
+    setTimeOff((prev) => prev.filter((t) => t.id !== id));
+    await fetch('/api/time-off', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
   }
 
   function handleSelectDate(date: string) {
@@ -214,6 +343,7 @@ export function WeeklySchedule({
 
   const selectedMember = members.find((m) => m.id === selectedMemberId);
   const readyToAssign = selectedMemberId !== null && selectedShift !== null;
+  const duplicateName = newName.trim() !== '' && members.some((m) => m.name.trim().toLowerCase() === newName.trim().toLowerCase());
 
   function getMemberName(memberId: string) {
     return members.find((m) => m.id === memberId)?.name ?? '?';
@@ -272,9 +402,27 @@ export function WeeklySchedule({
       .catch(() => {});
   }, [currentMonth, currentYear]);
 
+  // Weekly hours per member (for chips + labor overview)
+  const memberHours = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of shifts) {
+      const [sh, sm] = s.start_time.split(':').map(Number);
+      const [eh, em] = s.end_time.split(':').map(Number);
+      map[s.team_member_id] = (map[s.team_member_id] ?? 0) + (eh * 60 + em - sh * 60 - sm) / 60;
+    }
+    for (const k of Object.keys(map)) map[k] = Math.round(map[k] * 10) / 10;
+    return map;
+  }, [shifts]);
+
+  function isOnTimeOff(memberId: string, date: string) {
+    return timeOff.some(
+      (t) => t.team_member_id === memberId && t.status !== 'denied' && t.start_date <= date && date <= t.end_date
+    );
+  }
+
   // Schedule warnings
   interface Warning {
-    type: 'overlap' | 'hours' | 'no-day-off' | 'sunday';
+    type: 'overlap' | 'hours' | 'no-day-off' | 'sunday' | 'coverage' | 'time-off';
     severity: 'error' | 'warn';
     message: string;
   }
@@ -359,8 +507,44 @@ export function WeeklySchedule({
       }
     }
 
+    // 5. Coverage: a daypart with staff but missing a whole department
+    for (const date of weekDates) {
+      const dayShifts = shifts.filter((s) => s.date === date);
+      if (dayShifts.length === 0) continue;
+      const d = new Date(date + 'T00:00:00');
+      const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      for (const period of ['morning', 'evening'] as const) {
+        const periodShifts = dayShifts.filter((s) => s.shift_type === period);
+        if (periodShifts.length === 0) continue;
+        const depts = new Set(periodShifts.map((s) => members.find((m) => m.id === s.team_member_id)?.department ?? 'foh'));
+        const label = period === 'morning' ? 'AM' : 'PM';
+        if (!depts.has('kitchen')) {
+          w.push({ type: 'coverage', severity: 'warn', message: `${dayLabel} ${label} has no kitchen staff` });
+        }
+        if (![...depts].some((dep) => dep !== 'kitchen')) {
+          w.push({ type: 'coverage', severity: 'warn', message: `${dayLabel} ${label} has no FOH staff` });
+        }
+      }
+    }
+
+    // 6. Scheduled during time off
+    for (const s of shifts) {
+      const t = timeOff.find(
+        (t) => t.team_member_id === s.team_member_id && t.status !== 'denied' && t.start_date <= s.date && s.date <= t.end_date
+      );
+      if (t) {
+        const member = members.find((m) => m.id === s.team_member_id);
+        const d = new Date(s.date + 'T00:00:00');
+        w.push({
+          type: 'time-off',
+          severity: 'error',
+          message: `${member?.name ?? '?'} is scheduled on ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} but has time off${t.reason ? ` (${t.reason})` : ''}`,
+        });
+      }
+    }
+
     return w;
-  }, [shifts, members, monthlySundayShifts, currentMonth, currentYear]);
+  }, [shifts, members, monthlySundayShifts, currentMonth, currentYear, timeOff, weekDates]);
 
   function renderShiftRow(s: Shift) {
     const isKitchen = getMemberDept(s.team_member_id) === 'kitchen';
@@ -419,6 +603,37 @@ export function WeeklySchedule({
             Week
           </button>
         </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap justify-center sm:justify-end gap-2 mb-4">
+        <button
+          onClick={copyLastWeek}
+          disabled={copyingWeek}
+          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest hover:bg-white transition disabled:opacity-50"
+        >
+          <Copy size={12} strokeWidth={2} />
+          {copyingWeek ? 'Copying...' : 'Copy last week'}
+        </button>
+        <button
+          onClick={copyScheduleText}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest transition',
+            copied
+              ? 'bg-green-600 text-white'
+              : 'border border-neutral-300 text-neutral-600 hover:bg-white'
+          )}
+        >
+          {copied ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={2} />}
+          {copied ? 'Copied!' : 'Copy for WhatsApp'}
+        </button>
+        <button
+          onClick={() => setShowTimeOff(true)}
+          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest hover:bg-white transition"
+        >
+          <CalendarOff size={12} strokeWidth={2} />
+          Time off
+        </button>
       </div>
 
       {/* Week navigation — week view only */}
@@ -774,6 +989,11 @@ export function WeeklySchedule({
                 >
                   {removeMode && <X size={10} strokeWidth={2} />}
                   {m.name}
+                  {!removeMode && (memberHours[m.id] ?? 0) > 0 && (
+                    <span className={cn('text-[9px] sm:text-[10px]', selectedMemberId === m.id ? 'text-blue-100' : 'text-blue-400')}>
+                      {memberHours[m.id]}h
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -802,6 +1022,11 @@ export function WeeklySchedule({
                 >
                   {removeMode && <X size={10} strokeWidth={2} />}
                   {m.name}
+                  {!removeMode && (memberHours[m.id] ?? 0) > 0 && (
+                    <span className={cn('text-[9px] sm:text-[10px]', selectedMemberId === m.id ? 'text-orange-100' : 'text-orange-400')}>
+                      {memberHours[m.id]}h
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -914,6 +1139,118 @@ export function WeeklySchedule({
         </div>
       )}
 
+      {/* Time off modal */}
+      {showTimeOff && (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-50 px-4 pb-4" onClick={() => setShowTimeOff(false)}>
+          <div
+            className="bg-cream border border-neutral-200 rounded-xl w-full max-w-md p-5 shadow-lg max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-xl">Time off</h2>
+              <button onClick={() => setShowTimeOff(false)} className="text-neutral-400 hover:text-ink transition">
+                <X size={18} strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {timeOffUnavailable ? (
+              <p className="text-sm text-neutral-500">
+                Time off isn&apos;t set up yet — run <code className="text-xs bg-white px-1 py-0.5 rounded border border-neutral-200">supabase/availability.sql</code> in the Supabase SQL Editor first.
+              </p>
+            ) : (
+              <>
+                {/* Add form */}
+                <div className="space-y-3 mb-5">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Team member</label>
+                    <select
+                      value={toMemberId}
+                      onChange={(e) => setToMemberId(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                    >
+                      <option value="">Select...</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">From</label>
+                      <input
+                        type="date"
+                        value={toStart}
+                        onChange={(e) => setToStart(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">To</label>
+                      <input
+                        type="date"
+                        value={toEnd}
+                        min={toStart || undefined}
+                        onChange={(e) => setToEnd(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Reason (optional)</label>
+                    <input
+                      type="text"
+                      value={toReason}
+                      onChange={(e) => setToReason(e.target.value)}
+                      placeholder="e.g. Vacation, doctor"
+                      className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                    />
+                  </div>
+                  <button
+                    onClick={addTimeOff}
+                    disabled={!toMemberId || !toStart || !toEnd}
+                    className="w-full bg-ink text-cream py-2.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition disabled:opacity-40"
+                  >
+                    Add time off
+                  </button>
+                </div>
+
+                {/* Existing entries */}
+                {timeOff.length === 0 ? (
+                  <p className="text-xs text-neutral-400 text-center">No time off scheduled</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    <h3 className="text-[10px] uppercase tracking-widest text-neutral-400 mb-2">Scheduled time off</h3>
+                    {timeOff.map((t) => {
+                      const from = new Date(t.start_date + 'T00:00:00');
+                      const to = new Date(t.end_date + 'T00:00:00');
+                      const sameDay = t.start_date === t.end_date;
+                      return (
+                        <div key={t.id} className="flex items-center gap-2 bg-white border border-neutral-200 rounded-lg px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{getMemberName(t.team_member_id)}</p>
+                            <p className="text-xs text-neutral-500">
+                              {from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {!sameDay && ` – ${to.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                              {t.reason && <span className="text-neutral-400"> · {t.reason}</span>}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => removeTimeOff(t.id)}
+                            className="p-1.5 text-neutral-300 hover:text-red-500 transition shrink-0"
+                          >
+                            <Trash2 size={14} strokeWidth={1.5} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Add team member modal */}
       {showAddMember && (
         <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-50 px-4 pb-4" onClick={() => setShowAddMember(false)}>
@@ -939,6 +1276,12 @@ export function WeeklySchedule({
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && addMember()}
                 />
+                {duplicateName && (
+                  <p className="flex items-center gap-1.5 text-[11px] text-amber-700 mt-1.5">
+                    <AlertTriangle size={11} className="shrink-0" />
+                    There&apos;s already a team member named {newName.trim()}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Department</label>
@@ -967,9 +1310,14 @@ export function WeeklySchedule({
                 <button
                   onClick={addMember}
                   disabled={!newName.trim()}
-                  className="flex-1 bg-ink text-cream py-2.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition disabled:opacity-40"
+                  className={cn(
+                    'flex-1 py-2.5 rounded text-xs uppercase tracking-widest transition disabled:opacity-40',
+                    duplicateName
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-ink text-cream hover:bg-neutral-800'
+                  )}
                 >
-                  Add
+                  {duplicateName ? 'Add anyway' : 'Add'}
                 </button>
                 <button
                   onClick={() => setShowAddMember(false)}

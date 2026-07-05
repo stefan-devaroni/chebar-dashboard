@@ -32,6 +32,24 @@ export async function POST(request: NextRequest) {
   const supabase = createClient();
   const body = await request.json();
 
+  // Bulk insert (used by "Copy last week")
+  if (Array.isArray(body.shifts)) {
+    const rows = body.shifts.map((s: any) => ({
+      team_member_id: s.team_member_id,
+      date: s.date,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      shift_type: s.shift_type || 'morning',
+      notes: s.notes || null,
+    }));
+    const { data, error } = await supabase
+      .from('shifts')
+      .insert(rows)
+      .select('*, team_members(id, name, color, department)');
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
   const { data, error } = await supabase
     .from('shifts')
     .insert({
