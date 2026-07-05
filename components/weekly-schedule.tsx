@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, UserPlus, X, Sun, Moon, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -71,6 +71,7 @@ export function WeeklySchedule({
   const [customEnd, setCustomEnd] = useState('15:00');
 
   const [showAddMember, setShowAddMember] = useState(false);
+  const [removeMode, setRemoveMode] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDept, setNewDept] = useState<'foh' | 'kitchen'>('foh');
 
@@ -140,6 +141,17 @@ export function WeeklySchedule({
       setNewName('');
       setShowAddMember(false);
     }
+  }
+
+  async function removeMember(id: string) {
+    if (selectedMemberId === id) setSelectedMemberId(null);
+    setMembers((prev) => prev.filter((m) => m.id !== id));
+    setShifts((prev) => prev.filter((s) => s.team_member_id !== id));
+    await fetch('/api/team', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
   }
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -326,14 +338,30 @@ export function WeeklySchedule({
       <div className="mt-4 sm:mt-6 bg-white border border-neutral-200 rounded-xl p-3 sm:p-4">
         <div className="flex items-center justify-between mb-2 sm:mb-3">
           <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-500 font-medium">1. Select team member</h3>
-          <button
-            onClick={() => setShowAddMember(true)}
-            className="flex items-center gap-1 text-[10px] text-gold hover:text-gold/80 uppercase tracking-widest transition"
-          >
-            <UserPlus size={10} strokeWidth={2} />
-            Add
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setRemoveMode(!removeMode); setSelectedMemberId(null); setSelectedShift(null); }}
+              className={cn(
+                'flex items-center gap-1 text-[10px] uppercase tracking-widest transition',
+                removeMode ? 'text-red-500' : 'text-neutral-400 hover:text-red-400'
+              )}
+            >
+              <UserMinus size={10} strokeWidth={2} />
+              {removeMode ? 'Done' : 'Remove'}
+            </button>
+            <button
+              onClick={() => { setRemoveMode(false); setShowAddMember(true); }}
+              className="flex items-center gap-1 text-[10px] text-gold hover:text-gold/80 uppercase tracking-widest transition"
+            >
+              <UserPlus size={10} strokeWidth={2} />
+              Add
+            </button>
+          </div>
         </div>
+
+        {removeMode && (
+          <p className="text-[10px] text-red-400 mb-2">Tap a name to remove them</p>
+        )}
 
         {fohMembers.length > 0 && (
           <div className="mb-2.5">
@@ -345,14 +373,17 @@ export function WeeklySchedule({
               {fohMembers.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
+                  onClick={() => removeMode ? removeMember(m.id) : setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
                   className={cn(
-                    'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium',
-                    selectedMemberId === m.id
-                      ? 'bg-blue-500 text-white ring-2 ring-blue-300'
-                      : 'bg-blue-50 text-blue-700 active:bg-blue-100'
+                    'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium flex items-center gap-1',
+                    removeMode
+                      ? 'bg-red-50 text-red-600 border border-red-200 active:bg-red-100'
+                      : selectedMemberId === m.id
+                        ? 'bg-blue-500 text-white ring-2 ring-blue-300'
+                        : 'bg-blue-50 text-blue-700 active:bg-blue-100'
                   )}
                 >
+                  {removeMode && <X size={10} strokeWidth={2} />}
                   {m.name}
                 </button>
               ))}
@@ -370,14 +401,17 @@ export function WeeklySchedule({
               {kitchenMembers.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
+                  onClick={() => removeMode ? removeMember(m.id) : setSelectedMemberId(selectedMemberId === m.id ? null : m.id)}
                   className={cn(
-                    'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium',
-                    selectedMemberId === m.id
-                      ? 'bg-orange-500 text-white ring-2 ring-orange-300'
+                    'text-[11px] sm:text-xs px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full transition font-medium flex items-center gap-1',
+                    removeMode
+                      ? 'bg-red-50 text-red-600 border border-red-200 active:bg-red-100'
+                      : selectedMemberId === m.id
+                        ? 'bg-orange-500 text-white ring-2 ring-orange-300'
                       : 'bg-orange-50 text-orange-700 active:bg-orange-100'
                   )}
                 >
+                  {removeMode && <X size={10} strokeWidth={2} />}
                   {m.name}
                 </button>
               ))}
