@@ -425,6 +425,7 @@ export function WeeklySchedule({
     type: 'overlap' | 'hours' | 'no-day-off' | 'sunday' | 'coverage' | 'time-off';
     severity: 'error' | 'warn';
     message: string;
+    date?: string; // set for day-specific warnings
   }
 
   const warnings = useMemo<Warning[]>(() => {
@@ -454,6 +455,7 @@ export function WeeklySchedule({
                 type: 'overlap',
                 severity: 'error',
                 message: `${member.name} has overlapping shifts on ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+                date,
               });
             }
           }
@@ -519,10 +521,10 @@ export function WeeklySchedule({
         const depts = new Set(periodShifts.map((s) => members.find((m) => m.id === s.team_member_id)?.department ?? 'foh'));
         const label = period === 'morning' ? 'AM' : 'PM';
         if (!depts.has('kitchen')) {
-          w.push({ type: 'coverage', severity: 'warn', message: `${dayLabel} ${label} has no kitchen staff` });
+          w.push({ type: 'coverage', severity: 'warn', message: `${dayLabel} ${label} has no kitchen staff`, date });
         }
         if (![...depts].some((dep) => dep !== 'kitchen')) {
-          w.push({ type: 'coverage', severity: 'warn', message: `${dayLabel} ${label} has no FOH staff` });
+          w.push({ type: 'coverage', severity: 'warn', message: `${dayLabel} ${label} has no FOH staff`, date });
         }
       }
     }
@@ -539,12 +541,22 @@ export function WeeklySchedule({
           type: 'time-off',
           severity: 'error',
           message: `${member?.name ?? '?'} is scheduled on ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} but has time off${t.reason ? ` (${t.reason})` : ''}`,
+          date: s.date,
         });
       }
     }
 
-    return w;
+    // Dedupe identical messages (e.g. several overlapping pairs on the same day)
+    const seen = new Set<string>();
+    return w.filter((x) => {
+      if (seen.has(x.message)) return false;
+      seen.add(x.message);
+      return true;
+    });
   }, [shifts, members, monthlySundayShifts, currentMonth, currentYear, timeOff, weekDates]);
+
+  // Day view: only warnings for the visible day. Week view: everything this week.
+  const visibleWarnings = view === 'day' ? warnings.filter((w) => w.date === currentDayDate) : warnings;
 
   function renderShiftRow(s: Shift) {
     const isKitchen = getMemberDept(s.team_member_id) === 'kitchen';
@@ -682,26 +694,6 @@ export function WeeklySchedule({
           <button onClick={() => navigateDay(1)} className="p-2 rounded hover:bg-white transition shrink-0">
             <ChevronRight size={18} strokeWidth={1.5} />
           </button>
-        </div>
-      )}
-
-      {/* Schedule warnings */}
-      {warnings.length > 0 && (
-        <div className="space-y-1.5 mb-3">
-          {warnings.map((w, i) => (
-            <div
-              key={i}
-              className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm',
-                w.severity === 'error'
-                  ? 'bg-red-50 border border-red-200 text-red-800'
-                  : 'bg-amber-50 border border-amber-200 text-amber-800'
-              )}
-            >
-              <AlertTriangle size={14} className={cn('shrink-0', w.severity === 'error' ? 'text-red-500' : 'text-amber-500')} />
-              <span>{w.message}</span>
-            </div>
-          ))}
         </div>
       )}
 
@@ -1136,6 +1128,29 @@ export function WeeklySchedule({
           <p className="text-[11px] sm:text-xs text-neutral-500">
             3. {view === 'day' ? <>Tap &quot;Add to this day&quot; above</> : <>Tap a day above</>} to assign <strong>{selectedMember?.name}</strong>
           </p>
+        </div>
+      )}
+
+      {/* Schedule warnings — scoped to the visible day/week */}
+      {visibleWarnings.length > 0 && (
+        <div className="space-y-1.5 mt-4 sm:mt-6">
+          <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-400 font-medium">
+            {view === 'day' ? 'Warnings for this day' : 'Warnings for this week'}
+          </h3>
+          {visibleWarnings.map((w, i) => (
+            <div
+              key={i}
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-xs sm:text-sm',
+                w.severity === 'error'
+                  ? 'bg-red-50 border border-red-200 text-red-800'
+                  : 'bg-amber-50 border border-amber-200 text-amber-800'
+              )}
+            >
+              <AlertTriangle size={14} className={cn('shrink-0', w.severity === 'error' ? 'text-red-500' : 'text-amber-500')} />
+              <span>{w.message}</span>
+            </div>
+          ))}
         </div>
       )}
 
