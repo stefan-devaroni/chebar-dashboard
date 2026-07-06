@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar, AlertTriangle, Copy, Check, CalendarOff, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar, AlertTriangle, Copy, Check, CalendarOff, Trash2, Link2 } from 'lucide-react';
+import { STAFF_TOKEN } from '@/lib/staff-token';
 
 interface TeamMember {
   id: string;
@@ -49,7 +50,8 @@ function getMonday(dateStr: string): Date {
 }
 
 function formatDate(d: Date): string {
-  return d.toISOString().split('T')[0];
+  // Local date, not toISOString() — Aruba is UTC-4, so UTC would shift the date forward in the evening
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatShortTime(t: string): string {
@@ -102,6 +104,7 @@ export function WeeklySchedule({
   });
 
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [copyingWeek, setCopyingWeek] = useState(false);
   const [showTimeOff, setShowTimeOff] = useState(false);
   const [timeOff, setTimeOff] = useState<TimeOff[]>([]);
@@ -223,7 +226,7 @@ export function WeeklySchedule({
   }
 
   function copyScheduleText() {
-    let text = `Che Bar — Schedule ${weekLabel}\n`;
+    let text = `*CHE BAR — SCHEDULE*\n${weekLabel}\n`;
     weekDates.forEach((date, i) => {
       const dayShifts = shifts.filter((s) => s.date === date);
       if (dayShifts.length === 0) return;
@@ -231,16 +234,23 @@ export function WeeklySchedule({
       text += `\n*${DAYS_FULL[i]} ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}*\n`;
       const am = dayShifts.filter((s) => s.shift_type === 'morning').sort(sortByDept);
       const pm = dayShifts.filter((s) => s.shift_type === 'evening').sort(sortByDept);
-      if (am.length > 0) {
-        text += `AM: ${am.map((s) => `${getMemberName(s.team_member_id)} (${formatShortTime(s.start_time)}–${formatShortTime(s.end_time)})`).join(', ')}\n`;
+      for (const s of am) {
+        text += `☀️ ${getMemberName(s.team_member_id)} — ${formatShortTime(s.start_time)} to ${formatShortTime(s.end_time)}\n`;
       }
-      if (pm.length > 0) {
-        text += `PM: ${pm.map((s) => `${getMemberName(s.team_member_id)} (${formatShortTime(s.start_time)}–${formatShortTime(s.end_time)})`).join(', ')}\n`;
+      for (const s of pm) {
+        text += `🌙 ${getMemberName(s.team_member_id)} — ${formatShortTime(s.start_time)} to ${formatShortTime(s.end_time)}\n`;
       }
     });
+    text += `\nFull schedule: ${window.location.origin}/rota/${STAFF_TOKEN}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function copyStaffLink() {
+    navigator.clipboard.writeText(`${window.location.origin}/rota/${STAFF_TOKEN}`);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   }
 
   async function addTimeOff() {
@@ -337,7 +347,7 @@ export function WeeklySchedule({
     });
   }
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = formatDate(new Date());
   const fohMembers = members.filter((m) => m.department !== 'kitchen');
   const kitchenMembers = members.filter((m) => m.department === 'kitchen');
 
@@ -638,6 +648,18 @@ export function WeeklySchedule({
         >
           {copied ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={2} />}
           {copied ? 'Copied!' : 'Copy for WhatsApp'}
+        </button>
+        <button
+          onClick={copyStaffLink}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest transition',
+            linkCopied
+              ? 'bg-green-600 text-white'
+              : 'border border-neutral-300 text-neutral-600 hover:bg-white'
+          )}
+        >
+          {linkCopied ? <Check size={12} strokeWidth={2} /> : <Link2 size={12} strokeWidth={2} />}
+          {linkCopied ? 'Link copied!' : 'Staff link'}
         </button>
         <button
           onClick={() => setShowTimeOff(true)}

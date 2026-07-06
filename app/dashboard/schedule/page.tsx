@@ -12,14 +12,16 @@ export default async function SchedulePage() {
     .eq('active', true)
     .order('name');
 
-  const today = new Date();
+  // Compute the week in Aruba time — the server runs in UTC, which is 4h ahead
+  const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Aruba' }));
   const monday = new Date(today);
   monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
 
-  const mondayStr = monday.toISOString().split('T')[0];
-  const sundayStr = sunday.toISOString().split('T')[0];
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const mondayStr = fmt(monday);
+  const sundayStr = fmt(sunday);
 
   const { data: shifts } = await supabase
     .from('shifts')
