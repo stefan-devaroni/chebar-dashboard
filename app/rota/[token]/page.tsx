@@ -79,23 +79,40 @@ export default async function StaffSchedulePage({
     return dA - dB;
   }
 
-  function renderShift(s: ShiftRow) {
+  function renderShift(s: ShiftRow, evening = false) {
     const isKitchen = s.team_members?.department === 'kitchen';
     return (
       <div
         key={s.id}
         className={cn(
           'flex items-center justify-between rounded-lg px-3 py-2',
-          isKitchen ? 'bg-orange-50' : 'bg-blue-50'
+          isKitchen
+            ? evening ? 'bg-orange-100' : 'bg-orange-50'
+            : evening ? 'bg-blue-100' : 'bg-blue-50'
         )}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', isKitchen ? 'bg-orange-400' : 'bg-blue-400')} />
-          <span className={cn('text-sm font-medium truncate', isKitchen ? 'text-orange-700' : 'text-blue-700')}>
+          <div className={cn(
+            'w-1.5 h-1.5 rounded-full shrink-0',
+            isKitchen
+              ? evening ? 'bg-orange-500' : 'bg-orange-400'
+              : evening ? 'bg-blue-500' : 'bg-blue-400'
+          )} />
+          <span className={cn(
+            'text-sm font-medium truncate',
+            isKitchen
+              ? evening ? 'text-orange-800' : 'text-orange-700'
+              : evening ? 'text-blue-800' : 'text-blue-700'
+          )}>
             {s.team_members?.name ?? '?'}
           </span>
         </div>
-        <span className={cn('text-xs shrink-0 ml-2', isKitchen ? 'text-orange-500' : 'text-blue-500')}>
+        <span className={cn(
+          'text-xs shrink-0 ml-2',
+          isKitchen
+            ? evening ? 'text-orange-600' : 'text-orange-500'
+            : evening ? 'text-blue-600' : 'text-blue-500'
+        )}>
           {formatTime(s.start_time)} – {formatTime(s.end_time)}
         </span>
       </div>
@@ -173,16 +190,16 @@ export default async function StaffSchedulePage({
                           <Sun size={12} className="text-amber-400" />
                           <span className="text-[9px] uppercase tracking-widest text-neutral-400">Morning</span>
                         </div>
-                        <div className="space-y-1">{morning.map(renderShift)}</div>
+                        <div className="space-y-1">{morning.map((s) => renderShift(s))}</div>
                       </div>
                     )}
                     {evening.length > 0 && (
-                      <div>
+                      <div className="rounded-lg bg-indigo-100/60 border border-indigo-200/60 p-2">
                         <div className="flex items-center gap-1.5 mb-1.5">
-                          <Moon size={12} className="text-indigo-400" />
-                          <span className="text-[9px] uppercase tracking-widest text-neutral-400">Evening</span>
+                          <Moon size={12} className="text-indigo-500" />
+                          <span className="text-[9px] uppercase tracking-widest text-indigo-500">Evening</span>
                         </div>
-                        <div className="space-y-1">{evening.map(renderShift)}</div>
+                        <div className="space-y-1">{evening.map((s) => renderShift(s, true))}</div>
                       </div>
                     )}
                   </div>

@@ -568,29 +568,46 @@ export function WeeklySchedule({
   // Day view: only warnings for the visible day. Week view: everything this week.
   const visibleWarnings = view === 'day' ? warnings.filter((w) => w.date === currentDayDate) : warnings;
 
-  function renderShiftRow(s: Shift) {
+  function renderShiftRow(s: Shift, evening = false) {
     const isKitchen = getMemberDept(s.team_member_id) === 'kitchen';
     return (
       <div
         key={s.id}
         className={cn(
           'flex items-center justify-between rounded-lg px-3 py-2',
-          isKitchen ? 'bg-orange-50' : 'bg-blue-50'
+          isKitchen
+            ? evening ? 'bg-orange-100' : 'bg-orange-50'
+            : evening ? 'bg-blue-100' : 'bg-blue-50'
         )}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', isKitchen ? 'bg-orange-400' : 'bg-blue-400')} />
-          <span className={cn('text-sm font-medium truncate', isKitchen ? 'text-orange-700' : 'text-blue-700')}>
+          <div className={cn(
+            'w-1.5 h-1.5 rounded-full shrink-0',
+            isKitchen
+              ? evening ? 'bg-orange-500' : 'bg-orange-400'
+              : evening ? 'bg-blue-500' : 'bg-blue-400'
+          )} />
+          <span className={cn(
+            'text-sm font-medium truncate',
+            isKitchen
+              ? evening ? 'text-orange-800' : 'text-orange-700'
+              : evening ? 'text-blue-800' : 'text-blue-700'
+          )}>
             {getMemberName(s.team_member_id)}
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className={cn('text-xs', isKitchen ? 'text-orange-500' : 'text-blue-500')}>
+          <span className={cn(
+            'text-xs',
+            isKitchen
+              ? evening ? 'text-orange-600' : 'text-orange-500'
+              : evening ? 'text-blue-600' : 'text-blue-500'
+          )}>
             {formatTime(s.start_time)} – {formatTime(s.end_time)}
           </span>
           <button
             onClick={() => removeShift(s.id)}
-            className="text-neutral-300 hover:text-red-500 active:text-red-500 transition"
+            className="text-neutral-400 hover:text-red-500 active:text-red-500 transition"
           >
             <X size={14} strokeWidth={2} />
           </button>
@@ -778,25 +795,20 @@ export function WeeklySchedule({
                 <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">Morning</span>
               </div>
               <div className="space-y-1.5">
-                {dayMorning.map(renderShiftRow)}
+                {dayMorning.map((s) => renderShiftRow(s))}
               </div>
             </div>
           )}
 
-          {/* Divider */}
-          {dayMorning.length > 0 && dayEvening.length > 0 && (
-            <div className="border-t border-dashed border-neutral-200 my-3" />
-          )}
-
-          {/* Evening */}
+          {/* Evening — darker "night" panel */}
           {dayEvening.length > 0 && (
-            <div>
+            <div className="rounded-lg bg-indigo-100/60 border border-indigo-200/60 p-2.5">
               <div className="flex items-center gap-1.5 mb-2">
-                <Moon size={13} className="text-indigo-400" />
-                <span className="text-[10px] uppercase tracking-widest text-neutral-400 font-medium">Evening</span>
+                <Moon size={13} className="text-indigo-500" />
+                <span className="text-[10px] uppercase tracking-widest text-indigo-500 font-medium">Evening</span>
               </div>
               <div className="space-y-1.5">
-                {dayEvening.map(renderShiftRow)}
+                {dayEvening.map((s) => renderShiftRow(s, true))}
               </div>
             </div>
           )}
@@ -914,11 +926,10 @@ export function WeeklySchedule({
                   )}
 
                   {eveningShifts.length > 0 && (
-                    <div>
-                      {morningShifts.length > 0 && <div className="border-t border-dashed border-neutral-100 my-0.5" />}
+                    <div className="rounded bg-indigo-100/60 px-0.5 py-1 mt-1">
                       <div className="flex items-center justify-center gap-0.5 mb-0.5">
-                        <Moon size={7} className="text-indigo-400 sm:hidden" />
-                        <Moon size={9} className="text-indigo-400 hidden sm:block" />
+                        <Moon size={7} className="text-indigo-500 sm:hidden" />
+                        <Moon size={9} className="text-indigo-500 hidden sm:block" />
                       </div>
                       <div className="space-y-px">
                         {eveningShifts.map((s) => (
@@ -927,8 +938,8 @@ export function WeeklySchedule({
                             className={cn(
                               'flex items-center rounded px-0.5 sm:px-1.5 py-px sm:py-0.5 text-[7px] sm:text-[10px] group',
                               getMemberDept(s.team_member_id) === 'kitchen'
-                                ? 'bg-orange-50 text-orange-700'
-                                : 'bg-blue-50 text-blue-700'
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-blue-100 text-blue-800'
                             )}
                           >
                             <span className="truncate flex-1 leading-tight">{getMemberName(s.team_member_id)}</span>
