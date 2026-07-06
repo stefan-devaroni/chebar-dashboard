@@ -34,12 +34,12 @@ const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const PRESET_SHIFTS = [
-  { label: '7:30–3', start: '07:30', end: '15:00', type: 'morning' as const },
-  { label: '8–3', start: '08:00', end: '15:00', type: 'morning' as const },
-  { label: '9–1', start: '09:00', end: '13:00', type: 'morning' as const },
-  { label: '3–11', start: '15:00', end: '23:00', type: 'evening' as const },
-  { label: '5–11', start: '17:00', end: '23:00', type: 'evening' as const },
-  { label: '6–11', start: '18:00', end: '23:00', type: 'evening' as const },
+  { label: '7:30 AM – 3 PM', start: '07:30', end: '15:00', type: 'morning' as const },
+  { label: '8 AM – 3 PM', start: '08:00', end: '15:00', type: 'morning' as const },
+  { label: '9 AM – 1 PM', start: '09:00', end: '13:00', type: 'morning' as const },
+  { label: '3 PM – 11 PM', start: '15:00', end: '23:00', type: 'evening' as const },
+  { label: '5 PM – 11 PM', start: '17:00', end: '23:00', type: 'evening' as const },
+  { label: '6 PM – 11 PM', start: '18:00', end: '23:00', type: 'evening' as const },
 ];
 
 function getMonday(dateStr: string): Date {
