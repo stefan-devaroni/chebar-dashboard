@@ -52,11 +52,13 @@ These are settled — don't relitigate unless Stefan brings them up.
 
 1. **June 1 simplification.** Menu and hours change on June 1. Operational clarity prioritized over revenue capture in the 3-5pm slot.
 2. **Cut from menu:** Marinara pizza (low volume, 13 sold/4mo), Americana pizza (chicken supply chain issue).
+   - **UPDATE Jul 2026 (confirmed by Stefan): the Americana was NOT removed — it's still on the menu and selling.**
 3. **Repricing on June 1:**
    - Big Breakfast $14 → $16
    - French Toast & Fruit $11.50 → $13.50
    - Salmon, Cream Cheese & Capers bagel $14.75 → $16.50
    - Brie, Walnuts & Honey pancake $15.75 → $17
+   - **UPDATE Jul 2026 (confirmed by Stefan): these price increases were NOT implemented — Big Breakfast still sells at the old price (POS avg ~$14.80). Treat the whole June 1 plan above as "planned, partially executed" and verify against POS data before citing any of it.**
 4. **Pizza + 2-for-1 cocktail combo** (Mon–Wed 6–8 PM only). House cocktail margin ~80% supports this.
 5. **Locals 15% off** (May–Nov, low season only, show Aruba ID).
 6. **3-5pm close** — Stefan chose operational simplicity over the marginal contribution; productivity SOP for staff during closure (prep/cleaning/content).
