@@ -32,9 +32,10 @@ export async function POST(request: NextRequest) {
     .select('*')
     .eq('status', 'draft')
     .order('created_at', { ascending: false })
-    .limit(1);
+    .limit(10);
 
-  const existingDraft = drafts?.[0];
+  // Never merge into an archived draft — new items would disappear from view
+  const existingDraft = drafts?.find((d: any) => !d.archived_at);
 
   if (existingDraft) {
     const existingStatuses: Record<string, string> = existingDraft.supplier_statuses ?? {};
@@ -127,6 +128,19 @@ export async function PUT(request: NextRequest) {
   const supabase = createClient();
   const body = await request.json();
 
+  // Archive / restore one or more orders
+  if (body.archived !== undefined) {
+    const ids: string[] = Array.isArray(body.ids) ? body.ids : [body.id];
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({ archived_at: body.archived ? new Date().toISOString() : null })
+      .in('id', ids)
+      .select();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
   // Per-supplier status update
   if (body.supplier_id !== undefined && body.supplier_status !== undefined) {
     const { data: order } = await supabase
@@ -181,4 +195,17 @@ export async function PUT(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
+}
+
+export async function DELETE(request: NextRequest) {
+  const supabase = createClient();
+  const { id } = await request.json();
+
+  const { error } = await supabase
+    .from('purchase_orders')
+    .delete()
+    .eq('id', id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ status: 'deleted' });
 }
