@@ -114,6 +114,12 @@ Env vars expected:
 - `reviews_snapshot` — empty (Google Places API integration was built but parked)
 - `reviews_individual` — schema not yet added (was part of the parked reviews tracking)
 
+**Access control (re-enabled Oct 11 2026 — auth had been removed Jul 3, leaving the dashboard and all APIs public):**
+- `middleware.ts` → `lib/supabase/middleware.ts` gates `/dashboard/*` (redirect to /login) and `/api/*` (401/403). Exceptions: `/api/ingest-email` (own shared secret) and `/rota/[token]` (public staff schedule, by design).
+- Roles (`lib/role-logic.ts`, shared by middleware + `lib/roles.ts`): **manager** = `ALLOWED_EMAILS` env (Netlify prod has Stefan's email) or a team member with role owner/manager and a linked `email`; **employee** = team member with role employee and a linked email; anyone else is denied. Employees only get `/dashboard/schedule` (read-only) + their own time-off requests.
+- Server code uses the service-role client (bypasses RLS). Known gap: RLS policies are "authenticated all", and magic-link sign-in creates accounts for any email — a technical user could hit PostgREST directly with their own session. Fix = disable signups in Supabase + provision accounts from the Team tab.
+- Migration `supabase/roles-and-requests.sql` (team_members.email + time_off) must be run in Supabase for employee logins/time-off requests.
+
 **Built but PARKED (files in repo but feature not deployed):**
 - Google Reviews tracking — daily scheduled function + dashboard page. Parked because Stefan didn't want to set up the Google Cloud Console / Places API key. Can revive whenever — the SQL migration is in `supabase/reviews_migration.sql`.
 
