@@ -5,21 +5,26 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { LayoutDashboard, CalendarDays, ListChecks, ShoppingCart, Users, Menu, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ListChecks, ShoppingCart, Truck, Users, Menu, X, LogOut } from 'lucide-react';
 
-const allNavItems: { href: string; label: string; icon: typeof LayoutDashboard; managerOnly: boolean; alsoActiveOn?: string[] }[] = [
-  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, managerOnly: true },
-  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, managerOnly: true, alsoActiveOn: ['/dashboard/orders'] },
-  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, managerOnly: false },
-  { href: '/dashboard/team', label: 'Team', icon: Users, managerOnly: true },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, managerOnly: true },
+type Role = 'manager' | 'employee';
+export type NavBadges = { missing: number; pending: number };
+
+const allNavItems: { href: string; label: string; icon: typeof LayoutDashboard; roles: Role[]; alsoActiveOn?: string[]; badge?: keyof NavBadges }[] = [
+  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, roles: ['manager'] },
+  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, roles: ['manager'], alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
+  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['manager', 'employee'] },
+  { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], badge: 'pending' },
+  { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['manager'] },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'] },
 ];
 
-export function NavSidebar({ role = 'manager' }: { role?: 'manager' | 'employee' }) {
+export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0 } }: { role?: Role; badges?: NavBadges }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const navItems = allNavItems.filter((i) => role === 'manager' || !i.managerOnly);
+  const navItems = allNavItems.filter((i) => i.roles.includes(role));
+  const alerting = navItems.some((i) => i.badge && badges[i.badge] > 0);
 
   async function signOut() {
     const supabase = createClient();
@@ -62,7 +67,15 @@ export function NavSidebar({ role = 'manager' }: { role?: 'manager' | 'employee'
               )}
             >
               <Icon size={16} strokeWidth={1.5} />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badge && badges[item.badge] > 0 && (
+                <span className={cn(
+                  'min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold flex items-center justify-center',
+                  item.badge === 'missing' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+                )}>
+                  {badges[item.badge]}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -86,8 +99,9 @@ export function NavSidebar({ role = 'manager' }: { role?: 'manager' | 'employee'
       {/* Mobile header bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-ink text-cream z-40 flex items-center justify-between px-4 py-3">
         <Link href="/dashboard" className="font-display text-xl">Che Bar</Link>
-        <button onClick={() => setOpen(true)} className="p-1.5">
+        <button onClick={() => setOpen(true)} className="p-1.5 relative" aria-label="Open menu">
           <Menu size={22} strokeWidth={1.5} />
+          {alerting && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-ink" />}
         </button>
       </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useCallback, memo } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -47,6 +47,8 @@ const CATEGORIES: Record<string, string> = {
   'other': 'Other',
 };
 
+const DRAFT_KEY = 'chebar.purchasing.draft';
+
 export function InventoryManager({
   initialItems,
   initialSuppliers,
@@ -66,6 +68,25 @@ export function InventoryManager({
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [buyQtys, setBuyQtys] = useState<Record<string, number>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [restored, setRestored] = useState(false);
+
+  // Keep in-progress counts and the chosen station on this device, so leaving the
+  // page halfway through the list doesn't lose them
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null');
+      if (saved?.buyQtys) setBuyQtys(saved.buyQtys);
+      if (saved?.station) setStationFilter(saved.station);
+    } catch {}
+    setRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ buyQtys, station: stationFilter }));
+    } catch {}
+  }, [restored, buyQtys, stationFilter]);
 
   const filtered = useMemo(() => {
     let result = items;

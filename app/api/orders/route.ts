@@ -1,5 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { deriveOverallStatus, fillSupplierStatuses, supplierKey, type OrderItem, type PurchaseOrder } from '@/lib/purchasing';
+
+type Supabase = ReturnType<typeof createClient>;
+
+// Add items to the most recent open draft, or start a new order.
+// Items for suppliers already sent/received in that draft overflow into a new order.
+async function addItemsToDraft(supabase: Supabase, newItems: OrderItem[], notes?: string | null) {
+  const bySupplier: Record<string, OrderItem[]> = {};
+  for (const item of newItems) (bySupplier[supplierKey(item)] ??= []).push(item);
+
+  const { data: drafts } = await supabase
+    .from('purchase_orders')
+    .select('*')
+    .eq('status', 'draft')
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  // Never merge into an archived draft — new items would disappear from view
+  const existingDraft = (drafts as PurchaseOrder[] | null)?.find((d) => !d.archived_at);
+
+  if (existingDraft) {
+    const existingStatuses: Record<string, string> = existingDraft.supplier_statuses ?? {};
+    const mergeItems: OrderItem[] = [];
+    const overflowItems: OrderItem[] = [];
+
+    for (const [sid, items] of Object.entries(bySupplier)) {
+      const st = existingStatuses[sid];
+      if (st === 'sent' || st === 'received') overflowItems.push(...items);
+      else mergeItems.push(...items);
+    }
+
+    if (mergeItems.length > 0) {
+      const merged = [...(existingDraft.items ?? [])];
+      for (const newItem of mergeItems) {
+        const existing = merged.find((m) => m.name === newItem.name && m.supplier_id === newItem.supplier_id);
+        if (existing) existing.toBuy += newItem.toBuy;
+        else merged.push(newItem);
+      }
+      const updatedStatuses = { ...existingStatuses };
+      for (const item of mergeItems) updatedStatuses[supplierKey(item)] ??= 'draft';
+
+      const { error } = await supabase
+        .from('purchase_orders')
+        .update({ items: merged, supplier_statuses: updatedStatuses })
+        .eq('id', existingDraft.id);
+      if (error) return { error: error.message };
+    }
+
+    if (overflowItems.length > 0) {
+      const overflowStatuses: Record<string, string> = {};
+      for (const item of overflowItems) overflowStatuses[supplierKey(item)] = 'draft';
+      const { error } = await supabase
+        .from('purchase_orders')
+        .insert({ items: overflowItems, status: 'draft', supplier_statuses: overflowStatuses });
+      if (error) return { error: error.message };
+    }
+
+    return { merged: true, id: existingDraft.id };
+  }
+
+  const supplierStatuses: Record<string, string> = {};
+  for (const item of newItems) supplierStatuses[supplierKey(item)] = 'draft';
+
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .insert({ items: newItems, notes: notes || null, status: 'draft', supplier_statuses: supplierStatuses })
+    .select()
+    .single();
+  if (error) return { error: error.message };
+  return { merged: false, id: data.id };
+}
 
 export async function GET() {
   const supabase = createClient();
@@ -16,112 +87,15 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const supabase = createClient();
   const body = await request.json();
-  const newItems: any[] = body.items;
 
-  // Group new items by supplier
-  const bySupplierId: Record<string, any[]> = {};
-  for (const item of newItems) {
-    const key = item.supplier_id ?? '__none__';
-    if (!bySupplierId[key]) bySupplierId[key] = [];
-    bySupplierId[key].push(item);
-  }
+  const result = await addItemsToDraft(supabase, body.items ?? [], body.notes);
+  if ('error' in result) return NextResponse.json({ error: result.error }, { status: 500 });
+  return NextResponse.json(result);
+}
 
-  // Find the most recent draft order to merge into
-  const { data: drafts } = await supabase
-    .from('purchase_orders')
-    .select('*')
-    .eq('status', 'draft')
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  // Never merge into an archived draft — new items would disappear from view
-  const existingDraft = drafts?.find((d: any) => !d.archived_at);
-
-  if (existingDraft) {
-    const existingStatuses: Record<string, string> = existingDraft.supplier_statuses ?? {};
-    const existingItems: any[] = existingDraft.items ?? [];
-
-    const mergeItems: any[] = [];
-    const overflowItems: any[] = [];
-
-    for (const [supplierId, items] of Object.entries(bySupplierId)) {
-      const supplierStatus = existingStatuses[supplierId];
-      if (supplierStatus === 'sent' || supplierStatus === 'received') {
-        // This supplier was already sent — overflow to a new order
-        overflowItems.push(...items);
-      } else {
-        mergeItems.push(...items);
-      }
-    }
-
-    // Merge compatible items into the existing draft
-    if (mergeItems.length > 0) {
-      const merged = [...existingItems];
-      for (const newItem of mergeItems) {
-        const existing = merged.find(
-          (m) => m.name === newItem.name && m.supplier_id === newItem.supplier_id
-        );
-        if (existing) {
-          existing.toBuy += newItem.toBuy;
-        } else {
-          merged.push(newItem);
-        }
-      }
-
-      // Add draft status for any new suppliers
-      const updatedStatuses = { ...existingStatuses };
-      for (const item of mergeItems) {
-        const key = item.supplier_id ?? '__none__';
-        if (!updatedStatuses[key]) updatedStatuses[key] = 'draft';
-      }
-
-      const { error } = await supabase
-        .from('purchase_orders')
-        .update({ items: merged, supplier_statuses: updatedStatuses })
-        .eq('id', existingDraft.id);
-
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Create a new order for overflow items (suppliers already sent)
-    if (overflowItems.length > 0) {
-      const overflowStatuses: Record<string, string> = {};
-      for (const item of overflowItems) {
-        overflowStatuses[item.supplier_id ?? '__none__'] = 'draft';
-      }
-      const { error } = await supabase
-        .from('purchase_orders')
-        .insert({
-          items: overflowItems,
-          status: 'draft',
-          supplier_statuses: overflowStatuses,
-        });
-
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ merged: true, id: existingDraft.id });
-  }
-
-  // No existing draft — create a new order
-  const supplierStatuses: Record<string, string> = {};
-  for (const item of newItems) {
-    supplierStatuses[item.supplier_id ?? '__none__'] = 'draft';
-  }
-
-  const { data, error } = await supabase
-    .from('purchase_orders')
-    .insert({
-      items: newItems,
-      notes: body.notes || null,
-      status: 'draft',
-      supplier_statuses: supplierStatuses,
-    })
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+async function loadOrder(supabase: Supabase, id: string) {
+  const { data } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
+  return data as PurchaseOrder | null;
 }
 
 export async function PUT(request: NextRequest) {
@@ -141,38 +115,71 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(data);
   }
 
-  // Per-supplier status update
-  if (body.supplier_id !== undefined && body.supplier_status !== undefined) {
-    const { data: order } = await supabase
+  // Close a "not delivered" issue: re-order the missing items, or just dismiss it
+  if (body.resolve_missing !== undefined) {
+    const order = await loadOrder(supabase, body.id);
+    const delivery = order?.deliveries?.[body.supplier_id];
+    if (!order || !delivery) return NextResponse.json({ error: 'Delivery not found' }, { status: 404 });
+
+    const resolution = body.resolve_missing === 'reordered' ? 'reordered' : 'dismissed';
+    if (resolution === 'reordered' && delivery.missing.length > 0) {
+      const source = order.items.find((i) => supplierKey(i) === body.supplier_id);
+      const reorderItems: OrderItem[] = delivery.missing.map((m) => ({
+        name: m.name,
+        unit: m.unit,
+        unit_size: m.unit_size,
+        toBuy: m.qty,
+        supplier_name: source?.supplier_name ?? 'No supplier assigned',
+        supplier_id: source?.supplier_id ?? null,
+      }));
+      const result = await addItemsToDraft(supabase, reorderItems);
+      if ('error' in result) return NextResponse.json({ error: result.error }, { status: 500 });
+    }
+
+    const deliveries = {
+      ...order.deliveries,
+      [body.supplier_id]: { ...delivery, resolved_at: new Date().toISOString(), resolution },
+    };
+    const { data, error } = await supabase
       .from('purchase_orders')
-      .select('*')
-      .eq('id', body.id)
+      .update({ deliveries })
+      .eq('id', order.id)
+      .select()
       .single();
 
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
+  // Undo a check-in (e.g. done by mistake): back to "sent", delivery record removed
+  if (body.undo_receive) {
+    const order = await loadOrder(supabase, body.id);
     if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
 
-    const statuses: Record<string, string> = order.supplier_statuses ?? {};
-    statuses[body.supplier_id] = body.supplier_status;
-
-    // Ensure all suppliers in the order have a status entry
-    const orderItems: any[] = order.items ?? [];
-    const allSupplierIds = new Set(orderItems.map((i: any) => i.supplier_id ?? '__none__'));
-    for (const sid of allSupplierIds) {
-      if (!statuses[sid]) statuses[sid] = 'draft';
-    }
-
-    // Derive the overall order status from supplier statuses
-    const allStatuses = Object.values(statuses);
-    let overallStatus = 'draft';
-    if (allStatuses.length > 0 && allStatuses.every((s) => s === 'received')) {
-      overallStatus = 'received';
-    } else if (allStatuses.every((s) => s === 'sent' || s === 'received')) {
-      overallStatus = 'sent';
-    }
+    const statuses = fillSupplierStatuses({ ...(order.supplier_statuses ?? {}), [body.supplier_id]: 'sent' }, order.items);
+    const deliveries = { ...(order.deliveries ?? {}) };
+    delete deliveries[body.supplier_id];
 
     const { data, error } = await supabase
       .from('purchase_orders')
-      .update({ supplier_statuses: statuses, status: overallStatus })
+      .update({ supplier_statuses: statuses, status: deriveOverallStatus(statuses, order.items), deliveries })
+      .eq('id', order.id)
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
+  // Per-supplier status update (mark sent / back to draft)
+  if (body.supplier_id !== undefined && body.supplier_status !== undefined) {
+    const order = await loadOrder(supabase, body.id);
+    if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+
+    const statuses = fillSupplierStatuses({ ...(order.supplier_statuses ?? {}), [body.supplier_id]: body.supplier_status }, order.items);
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({ supplier_statuses: statuses, status: deriveOverallStatus(statuses, order.items) })
       .eq('id', body.id)
       .select()
       .single();
@@ -182,7 +189,7 @@ export async function PUT(request: NextRequest) {
   }
 
   // Legacy whole-order status update
-  const update: any = {};
+  const update: Record<string, any> = {};
   if (body.status !== undefined) update.status = body.status;
   if (body.notes !== undefined) update.notes = body.notes;
 

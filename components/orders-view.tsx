@@ -1,27 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Truck, FileText, Check, Clock, Package, ChevronDown, ChevronRight, ClipboardCheck, AlertTriangle, Copy, X, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
-
-interface OrderItem {
-  name: string;
-  unit: string;
-  unit_size: string | null;
-  toBuy: number;
-  supplier_name: string;
-  supplier_id: string | null;
-}
-
-interface PurchaseOrder {
-  id: string;
-  created_at: string;
-  status: 'draft' | 'sent' | 'received';
-  notes: string | null;
-  items: OrderItem[];
-  supplier_statuses: Record<string, string> | null;
-  archived_at?: string | null;
-}
+import {
+  Truck, FileText, Check, Clock, Package, ChevronDown, ChevronRight, ClipboardCheck, AlertTriangle,
+  Copy, Archive, ArchiveRestore, Trash2, MessageCircle, Mail, Phone, RotateCcw, ShoppingCart, X,
+} from 'lucide-react';
+import { DeliveryChecklist } from '@/components/delivery-checklist';
+import {
+  buildMissingMessage, buildOrderMessage, formatQty, getSupplierStatus, groupBySupplier, openMissing, shortDate,
+  whatsappNumber, NO_SUPPLIER, type OrderItem, type PurchaseOrder, type SupplierContact,
+} from '@/lib/purchasing';
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-amber-100 text-amber-800',
@@ -29,173 +18,85 @@ const STATUS_COLORS: Record<string, string> = {
   received: 'bg-green-100 text-green-800',
 };
 
+const btn = 'flex items-center gap-1.5 px-3 py-2 rounded text-xs uppercase tracking-widest transition';
+const btnOutline = `${btn} border border-neutral-300 text-neutral-700 hover:bg-white`;
+
 export function OrdersView({
   initialOrders,
   suppliers,
 }: {
   initialOrders: PurchaseOrder[];
-  suppliers: { id: string; name: string }[];
+  suppliers: SupplierContact[];
 }) {
   const [orders, setOrders] = useState<PurchaseOrder[]>(initialOrders);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(
     initialOrders.find((o) => !o.archived_at)?.id ?? null
   );
   const [showArchived, setShowArchived] = useState(false);
-  // Track which supplier sections are in "checking delivery" mode
-  // Key: "orderId:supplierId", value: Set of checked item indices
-  const [checking, setChecking] = useState<Record<string, Set<number>>>({});
-  // Missing items alert popup
-  const [missingAlert, setMissingAlert] = useState<{ supplierName: string; text: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [checkingKey, setCheckingKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const checkKey = (orderId: string, supplierId: string) => `${orderId}:${supplierId}`;
+  const supplierById = Object.fromEntries(suppliers.map((s) => [s.id, s]));
+  const keyOf = (orderId: string, supplierId: string) => `${orderId}:${supplierId}`;
 
-  const startChecking = useCallback((orderId: string, supplierId: string, itemCount: number) => {
-    setChecking((prev) => ({ ...prev, [checkKey(orderId, supplierId)]: new Set() }));
-  }, []);
-
-  const toggleCheck = useCallback((orderId: string, supplierId: string, idx: number) => {
-    setChecking((prev) => {
-      const key = checkKey(orderId, supplierId);
-      const current = new Set(prev[key] ?? []);
-      if (current.has(idx)) current.delete(idx); else current.add(idx);
-      return { ...prev, [key]: current };
-    });
-  }, []);
-
-  const stopChecking = useCallback((orderId: string, supplierId: string) => {
-    setChecking((prev) => {
-      const next = { ...prev };
-      delete next[checkKey(orderId, supplierId)];
-      return next;
-    });
-  }, []);
-
-  const receiveWithMissing = useCallback(async (
-    order: PurchaseOrder,
-    supplierId: string,
-    supplierName: string,
-    items: OrderItem[],
-    checkedSet: Set<number>
-  ) => {
-    const missingItems = items.filter((_, idx) => !checkedSet.has(idx));
-
-    // Format missing items text for WhatsApp
-    const date = new Date(order.created_at).toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric',
-    });
-    let text = `Missing from ${supplierName} delivery (${date}):\n\n`;
-    for (const item of missingItems) {
-      text += `- ${item.toBuy} ${item.unit} ${item.name}`;
-      if (item.unit_size) text += ` (${item.unit_size})`;
-      text += '\n';
-    }
-
-    // Mark this supplier as received
-    updateSupplierStatus(order.id, supplierId, 'received');
-    stopChecking(order.id, supplierId);
-
-    // Create a new draft order with the missing items
-    await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: missingItems }),
-    });
-
-    // Refresh orders
-    const res = await fetch('/api/orders');
-    if (res.ok) {
-      const data = await res.json();
-      setOrders(data);
-    }
-
-    // Show the missing items popup
-    setCopied(false);
-    setMissingAlert({ supplierName, text });
-  }, [stopChecking]);
-
-  function getSupplierStatus(order: PurchaseOrder, supplierId: string): string {
-    return order.supplier_statuses?.[supplierId] ?? order.status ?? 'draft';
+  function replaceOrder(updated: PurchaseOrder) {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
   }
 
-  async function updateSupplierStatus(orderId: string, supplierId: string, status: string) {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id !== orderId) return o;
-        const statuses = { ...(o.supplier_statuses ?? {}) };
-        statuses[supplierId] = status;
-        // Ensure all suppliers in the order have a status entry
-        for (const item of o.items) {
-          const sid = item.supplier_id ?? '__none__';
-          if (!statuses[sid]) statuses[sid] = 'draft';
-        }
-        const allStatuses = Object.values(statuses);
-        let overall: 'draft' | 'sent' | 'received' = 'draft';
-        if (allStatuses.every((s) => s === 'received')) overall = 'received';
-        else if (allStatuses.every((s) => s === 'sent' || s === 'received')) overall = 'sent';
-        return { ...o, supplier_statuses: statuses, status: overall };
-      })
-    );
+  async function refresh() {
+    const res = await fetch('/api/orders');
+    if (res.ok) setOrders(await res.json());
+  }
 
+  async function putOrder(body: Record<string, unknown>, failMessage: string) {
     const res = await fetch('/api/orders', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: orderId, supplier_id: supplierId, supplier_status: status }),
+      body: JSON.stringify(body),
     });
-    if (res.ok) {
-      const updated = await res.json();
-      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(String(data.error ?? '').match(/archived_at|deliveries/)
+        ? 'This needs a one-time database update first (supabase/purchasing-workflow.sql).'
+        : failMessage);
+      return null;
     }
+    return data;
   }
 
-  function groupBySupplier(items: OrderItem[]) {
-    const map: Record<string, { supplierName: string; items: OrderItem[] }> = {};
-    for (const item of items) {
-      const key = item.supplier_id ?? '__none__';
-      if (!map[key]) {
-        map[key] = { supplierName: item.supplier_name || 'No supplier assigned', items: [] };
-      }
-      map[key].items.push(item);
-    }
-    return Object.entries(map).sort(([a], [b]) => {
-      if (a === '__none__') return 1;
-      if (b === '__none__') return -1;
-      return map[a].supplierName.localeCompare(map[b].supplierName);
-    });
+  function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
+  }
+
+  async function updateSupplierStatus(order: PurchaseOrder, supplierId: string, status: string) {
+    const updated = await putOrder({ id: order.id, supplier_id: supplierId, supplier_status: status }, 'Could not update the order.');
+    if (updated) replaceOrder(updated);
+  }
+
+  async function undoReceive(order: PurchaseOrder, supplierId: string, supplierName: string) {
+    if (!confirm(`Undo the ${supplierName} check-in? It goes back to "sent" so it can be checked again.`)) return;
+    const updated = await putOrder({ id: order.id, supplier_id: supplierId, undo_receive: true }, 'Could not undo the check-in.');
+    if (updated) replaceOrder(updated);
+  }
+
+  async function resolveMissing(order: PurchaseOrder, supplierId: string, resolution: 'reordered' | 'dismissed') {
+    const updated = await putOrder({ id: order.id, supplier_id: supplierId, resolve_missing: resolution }, 'Could not update.');
+    if (!updated) return;
+    // Re-ordering may have changed or created a draft order
+    if (resolution === 'reordered') await refresh();
+    else replaceOrder(updated);
   }
 
   function copyOrder(order: PurchaseOrder) {
-    const date = new Date(order.created_at).toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric',
-    });
-    const grouped = groupBySupplier(order.items);
-    let text = `Che Bar — Purchase Order — ${date}\n`;
-    text += '═'.repeat(40) + '\n\n';
-    for (const [, { supplierName, items }] of grouped) {
-      text += `▸ ${supplierName}\n`;
-      text += '─'.repeat(40) + '\n';
-      for (const item of items) {
-        text += `  ${item.toBuy} ${item.unit}  ${item.name}`;
-        if (item.unit_size) text += ` (${item.unit_size})`;
-        text += '\n';
-      }
+    let text = `Che Bar — Purchase Order — ${shortDate(order.created_at)}\n${'═'.repeat(40)}\n\n`;
+    for (const [, { supplierName, items }] of groupBySupplier(order.items)) {
+      text += `▸ ${supplierName}\n${'─'.repeat(40)}\n`;
+      for (const item of items) text += `  ${formatQty(item, item.toBuy)}\n`;
       text += '\n';
     }
-    navigator.clipboard.writeText(text);
-  }
-
-  function copySupplierSection(supplierName: string, items: OrderItem[], orderDate: string) {
-    const date = new Date(orderDate).toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric',
-    });
-    let text = `Order for ${supplierName} — ${date}\n`;
-    text += '─'.repeat(40) + '\n';
-    for (const item of items) {
-      text += `${item.toBuy} ${item.unit}  ${item.name}`;
-      if (item.unit_size) text += ` (${item.unit_size})`;
-      text += '\n';
-    }
-    navigator.clipboard.writeText(text);
+    copy(text, `all:${order.id}`);
   }
 
   function getDisplayStatus(order: PurchaseOrder): string {
@@ -210,18 +111,8 @@ export function OrdersView({
     const previous = orders;
     const stamp = archived ? new Date().toISOString() : null;
     setOrders((prev) => prev.map((o) => (ids.includes(o.id) ? { ...o, archived_at: stamp } : o)));
-    const res = await fetch('/api/orders', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids, archived }),
-    });
-    if (!res.ok) {
-      setOrders(previous);
-      const data = await res.json().catch(() => ({}));
-      alert(String(data.error ?? '').includes('archived_at')
-        ? 'Archiving needs a one-time database update first (supabase/orders-archive.sql).'
-        : 'Could not update the order. Please try again.');
-    }
+    const ok = await putOrder({ ids, archived }, 'Could not update the order. Please try again.');
+    if (!ok) setOrders(previous);
   }
 
   async function deleteOrder(id: string) {
@@ -239,19 +130,172 @@ export function OrdersView({
     }
   }
 
+  const issues = openMissing(orders);
   const activeOrders = orders.filter((o) => !o.archived_at);
   const archivedOrders = orders.filter((o) => o.archived_at);
   const receivedIds = activeOrders.filter((o) => getDisplayStatus(o) === 'received').map((o) => o.id);
+
+  function contactButtons(order: PurchaseOrder, supplierId: string, supplierName: string, items: OrderItem[]) {
+    const supplier = supplierId === NO_SUPPLIER ? undefined : supplierById[supplierId];
+    const message = buildOrderMessage(supplier, supplierName, items);
+    const wa = whatsappNumber(supplier?.phone);
+    const key = keyOf(order.id, supplierId);
+    return (
+      <>
+        <a
+          href={`https://wa.me/${wa ?? ''}?text=${encodeURIComponent(message)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(btn, 'bg-[#25D366] text-white hover:bg-[#1fb957]')}
+        >
+          <MessageCircle size={13} strokeWidth={2} />
+          WhatsApp
+        </a>
+        {supplier?.email && (
+          <a
+            href={`mailto:${supplier.email}?subject=${encodeURIComponent(`Order from Che Bar — ${shortDate(order.created_at)}`)}&body=${encodeURIComponent(message)}`}
+            className={btnOutline}
+          >
+            <Mail size={13} strokeWidth={2} />
+            Email
+          </a>
+        )}
+        {supplier?.phone && (
+          <a href={`tel:${supplier.phone.replace(/[^\d+]/g, '')}`} className={btnOutline}>
+            <Phone size={13} strokeWidth={2} />
+            Call
+          </a>
+        )}
+        <button onClick={() => copy(message, key)} className={cn(btnOutline, copiedKey === key && 'border-green-500 text-green-700')}>
+          {copiedKey === key ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={2} />}
+          {copiedKey === key ? 'Copied' : 'Copy'}
+        </button>
+      </>
+    );
+  }
+
+  function itemRows(items: OrderItem[]) {
+    return (
+      <div className="bg-white border border-neutral-200 rounded divide-y divide-neutral-100 mb-3">
+        {items.map((item) => (
+          <div key={item.name} className="flex items-center justify-between gap-3 px-3 py-2.5">
+            <span className="text-sm min-w-0">
+              {item.name}
+              {item.unit_size && <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>}
+            </span>
+            <span className="text-sm font-bold text-ink shrink-0">{item.toBuy} {item.unit}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderSupplierSection(order: PurchaseOrder, supplierId: string, supplierName: string, items: OrderItem[]) {
+    const sStatus = getSupplierStatus(order, supplierId);
+    const key = keyOf(order.id, supplierId);
+    const delivery = order.deliveries?.[supplierId];
+    const isChecking = checkingKey === key;
+
+    return (
+      <div key={supplierId} className={cn(
+        'rounded-lg border p-3 sm:p-4',
+        sStatus === 'received' ? 'bg-green-50/50 border-green-200' :
+        sStatus === 'sent' ? 'bg-blue-50/50 border-blue-200' :
+        'bg-cream border-neutral-200'
+      )}>
+        <div className="flex items-center gap-2 mb-3 min-w-0">
+          <Truck size={14} className="text-neutral-400 shrink-0" />
+          <h3 className="font-medium text-sm truncate">{supplierName}</h3>
+          <span className="text-xs text-neutral-400 shrink-0">({items.length})</span>
+          <span className={cn('text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium shrink-0', STATUS_COLORS[sStatus] ?? STATUS_COLORS.draft)}>
+            {sStatus}
+          </span>
+        </div>
+
+        {isChecking ? (
+          <DeliveryChecklist
+            orderId={order.id}
+            supplierId={supplierId}
+            supplierName={supplierName}
+            items={items}
+            onCancel={() => setCheckingKey(null)}
+            onConfirmed={(updated) => { replaceOrder(updated); setCheckingKey(null); }}
+          />
+        ) : sStatus === 'received' && delivery ? (
+          <>
+            <p className="text-xs text-neutral-600 mb-2">
+              Checked in{delivery.received_by ? ` by ${delivery.received_by}` : ''} · {shortDate(delivery.received_at)}{' '}
+              {new Date(delivery.received_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+            </p>
+            <div className="bg-white border border-neutral-200 rounded divide-y divide-neutral-100 mb-3">
+              {delivery.lines.map((l) => {
+                const short = l.received < l.ordered;
+                return (
+                  <div key={l.name} className={cn('flex items-center justify-between gap-3 px-3 py-2.5', short && 'bg-amber-50')}>
+                    <span className="text-sm min-w-0">{l.name}</span>
+                    <span className={cn('text-sm font-bold shrink-0 tabular-nums', short ? 'text-amber-700' : 'text-green-700')}>
+                      {l.received}/{l.ordered} {l.unit}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {delivery.missing.length > 0 && delivery.resolved_at && (
+              <p className="text-xs text-neutral-500 mb-3">
+                Missing items {delivery.resolution === 'reordered' ? 'added to the next order' : 'dismissed'} · {shortDate(delivery.resolved_at)}
+              </p>
+            )}
+            <button onClick={() => undoReceive(order, supplierId, supplierName)} className={btnOutline}>
+              <RotateCcw size={13} strokeWidth={2} />
+              Undo check-in
+            </button>
+          </>
+        ) : (
+          <>
+            {itemRows(items)}
+            <div className="flex flex-wrap gap-2">
+              {sStatus === 'draft' && (
+                <>
+                  {contactButtons(order, supplierId, supplierName, items)}
+                  <button
+                    onClick={() => updateSupplierStatus(order, supplierId, 'sent')}
+                    className={cn(btn, 'bg-blue-600 text-white hover:bg-blue-700')}
+                  >
+                    <Check size={13} strokeWidth={2} />
+                    Mark sent
+                  </button>
+                </>
+              )}
+              {sStatus === 'sent' && (
+                <>
+                  <button onClick={() => setCheckingKey(key)} className={cn(btn, 'bg-blue-600 text-white hover:bg-blue-700')}>
+                    <ClipboardCheck size={13} strokeWidth={2} />
+                    Check delivery
+                  </button>
+                  <button onClick={() => updateSupplierStatus(order, supplierId, 'draft')} className={btnOutline}>
+                    <Clock size={13} strokeWidth={2} />
+                    Back to draft
+                  </button>
+                </>
+              )}
+              {sStatus === 'received' && !delivery && (
+                <button onClick={() => updateSupplierStatus(order, supplierId, 'sent')} className={btnOutline}>
+                  <RotateCcw size={13} strokeWidth={2} />
+                  Reopen
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   function renderOrder(order: PurchaseOrder) {
     const isExpanded = expandedOrder === order.id;
     const grouped = groupBySupplier(order.items);
     const date = new Date(order.created_at);
-    const totalItems = order.items.length;
-    const supplierCount = grouped.length;
-
     const displayStatus = getDisplayStatus(order);
-
     const statusLabel = displayStatus === 'partial' ? 'In progress' : displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1);
     const statusColor = displayStatus === 'partial' ? 'bg-blue-50 text-blue-700' : STATUS_COLORS[displayStatus] ?? STATUS_COLORS.draft;
 
@@ -268,9 +312,7 @@ export function OrdersView({
               : <ChevronRight size={16} className="text-neutral-400 shrink-0" />}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm">
-                  {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                </span>
+                <span className="font-medium text-sm">{shortDate(order.created_at)}</span>
                 <span className="text-xs text-neutral-400">
                   {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                 </span>
@@ -279,7 +321,7 @@ export function OrdersView({
                 </span>
               </div>
               <p className="text-xs text-neutral-500 mt-0.5">
-                {totalItems} items from {supplierCount} supplier{supplierCount !== 1 ? 's' : ''}
+                {order.items.length} items from {grouped.length} supplier{grouped.length !== 1 ? 's' : ''}
               </p>
             </div>
           </button>
@@ -303,231 +345,18 @@ export function OrdersView({
           </div>
         </div>
 
-        {/* Expanded order body */}
         {isExpanded && (
-          <div className="border-t border-neutral-100 px-4 py-4 sm:px-5 space-y-5">
-            {/* Copy all button */}
+          <div className="border-t border-neutral-100 px-4 py-4 sm:px-5 space-y-4">
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => copyOrder(order)}
-                className="flex items-center gap-1.5 bg-ink text-cream px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition"
+                className={cn(btn, 'bg-ink text-cream hover:bg-neutral-800')}
               >
-                <FileText size={12} strokeWidth={2} />
-                Copy all
+                {copiedKey === `all:${order.id}` ? <Check size={12} strokeWidth={2} /> : <FileText size={12} strokeWidth={2} />}
+                {copiedKey === `all:${order.id}` ? 'Copied' : 'Copy all'}
               </button>
             </div>
-
-            {/* Supplier groups */}
-            {grouped.map(([supplierId, { supplierName, items }]) => {
-              const sStatus = getSupplierStatus(order, supplierId);
-              const ck = checkKey(order.id, supplierId);
-              const checkedSet = checking[ck];
-              const isChecking = checkedSet !== undefined;
-              const checkedCount = checkedSet?.size ?? 0;
-              const allChecked = isChecking && checkedCount === items.length;
-              const missingCount = isChecking ? items.length - checkedCount : 0;
-
-              return (
-                <div key={supplierId} className={cn(
-                  'rounded-lg border p-3 sm:p-4',
-                  sStatus === 'received' ? 'bg-green-50/50 border-green-200' :
-                  sStatus === 'sent' ? 'bg-blue-50/50 border-blue-200' :
-                  'bg-cream border-neutral-200'
-                )}>
-                  {/* Supplier header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Truck size={14} className="text-neutral-400 shrink-0" />
-                      <h3 className="font-medium text-sm truncate">{supplierName}</h3>
-                      <span className="text-xs text-neutral-400 shrink-0">({items.length})</span>
-                      <span className={cn('text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium shrink-0', STATUS_COLORS[sStatus] ?? STATUS_COLORS.draft)}>
-                        {sStatus}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => copySupplierSection(supplierName, items, order.created_at)}
-                      className="text-xs text-gold hover:text-gold/80 uppercase tracking-widest transition shrink-0 ml-2"
-                    >
-                      Copy
-                    </button>
-                  </div>
-
-                  {/* Checking progress bar */}
-                  {isChecking && (
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className={cn('font-medium', allChecked ? 'text-green-700' : 'text-blue-700')}>
-                          {checkedCount}/{items.length} checked
-                        </span>
-                        {missingCount > 0 && checkedCount > 0 && (
-                          <span className="flex items-center gap-1 text-amber-600">
-                            <AlertTriangle size={10} strokeWidth={2} />
-                            {missingCount} not checked
-                          </span>
-                        )}
-                      </div>
-                      <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
-                        <div
-                          className={cn('h-full rounded-full transition-all', allChecked ? 'bg-green-500' : 'bg-blue-500')}
-                          style={{ width: `${items.length > 0 ? (checkedCount / items.length) * 100 : 0}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Items list */}
-                  <div className="bg-white border border-neutral-200 rounded overflow-hidden mb-3">
-                    {/* Desktop table */}
-                    <table className="w-full text-sm hidden sm:table">
-                      <thead>
-                        <tr className="border-b border-neutral-100 text-xs uppercase tracking-widest text-neutral-400">
-                          {isChecking && <th className="px-2 py-2 w-8"></th>}
-                          <th className="text-left px-4 py-2 font-normal">Item</th>
-                          <th className="text-center px-3 py-2 font-normal w-16">Qty</th>
-                          <th className="text-left px-3 py-2 font-normal w-20">Unit</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, idx) => {
-                          const checked = checkedSet?.has(idx) ?? false;
-                          return (
-                            <tr
-                              key={idx}
-                              className={cn(
-                                'border-b border-neutral-50 last:border-b-0 transition',
-                                isChecking && checked ? 'bg-green-50/60' : '',
-                                isChecking && !checked ? 'cursor-pointer hover:bg-neutral-50' : ''
-                              )}
-                              onClick={isChecking ? () => toggleCheck(order.id, supplierId, idx) : undefined}
-                            >
-                              {isChecking && (
-                                <td className="px-2 py-2 text-center">
-                                  <div className={cn(
-                                    'w-5 h-5 rounded border-2 flex items-center justify-center transition',
-                                    checked ? 'bg-green-500 border-green-500' : 'border-neutral-300'
-                                  )}>
-                                    {checked && <Check size={12} strokeWidth={3} className="text-white" />}
-                                  </div>
-                                </td>
-                              )}
-                              <td className={cn('px-4 py-2', isChecking && checked ? 'line-through text-neutral-400' : '')}>
-                                {item.name}
-                                {item.unit_size && <span className="text-xs text-neutral-500 ml-1.5">({item.unit_size})</span>}
-                              </td>
-                              <td className={cn('px-3 py-2 text-center font-bold', isChecking && checked ? 'text-green-600' : 'text-red-700')}>{item.toBuy}</td>
-                              <td className="px-3 py-2 text-neutral-500">{item.unit}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {/* Mobile list */}
-                    <div className="sm:hidden divide-y divide-neutral-100">
-                      {items.map((item, idx) => {
-                        const checked = checkedSet?.has(idx) ?? false;
-                        return (
-                          <div
-                            key={idx}
-                            className={cn(
-                              'px-3 py-2.5 flex items-center gap-3 transition',
-                              isChecking && checked ? 'bg-green-50/60' : '',
-                              isChecking && !checked ? 'active:bg-neutral-50' : ''
-                            )}
-                            onClick={isChecking ? () => toggleCheck(order.id, supplierId, idx) : undefined}
-                          >
-                            {isChecking && (
-                              <div className={cn(
-                                'w-6 h-6 rounded border-2 flex items-center justify-center shrink-0 transition',
-                                checked ? 'bg-green-500 border-green-500' : 'border-neutral-300'
-                              )}>
-                                {checked && <Check size={14} strokeWidth={3} className="text-white" />}
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <span className={cn('text-sm block truncate', isChecking && checked ? 'line-through text-neutral-400' : '')}>{item.name}</span>
-                              {item.unit_size && <span className="text-xs text-neutral-400">{item.unit_size}</span>}
-                            </div>
-                            <span className={cn('font-bold text-sm shrink-0 ml-2', isChecking && checked ? 'text-green-600' : 'text-red-700')}>
-                              {item.toBuy} {item.unit}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Per-supplier status buttons */}
-                  <div className="flex flex-wrap gap-2">
-                    {sStatus === 'draft' && (
-                      <button
-                        onClick={() => updateSupplierStatus(order.id, supplierId, 'sent')}
-                        className="flex items-center gap-1.5 border border-blue-300 text-blue-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-blue-50 transition"
-                      >
-                        <Check size={12} strokeWidth={2} />
-                        Mark sent
-                      </button>
-                    )}
-                    {sStatus === 'sent' && !isChecking && (
-                      <button
-                        onClick={() => startChecking(order.id, supplierId, items.length)}
-                        className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-blue-700 transition"
-                      >
-                        <ClipboardCheck size={12} strokeWidth={2} />
-                        Check delivery
-                      </button>
-                    )}
-                    {sStatus === 'sent' && isChecking && (
-                      <>
-                        <button
-                          onClick={() => {
-                            if (allChecked) {
-                              updateSupplierStatus(order.id, supplierId, 'received');
-                              stopChecking(order.id, supplierId);
-                            } else {
-                              receiveWithMissing(order, supplierId, supplierName, items, checkedSet!);
-                            }
-                          }}
-                          disabled={checkedCount === 0}
-                          className={cn(
-                            'flex items-center gap-1.5 px-3 py-1.5 rounded text-xs uppercase tracking-widest transition',
-                            allChecked
-                              ? 'bg-green-600 text-white hover:bg-green-700'
-                              : 'border border-amber-400 text-amber-800 bg-amber-50 hover:bg-amber-100 disabled:opacity-40'
-                          )}
-                        >
-                          {allChecked ? <Check size={12} strokeWidth={2} /> : <AlertTriangle size={12} strokeWidth={2} />}
-                          {allChecked ? 'All received' : `Receive (${missingCount} missing)`}
-                        </button>
-                        <button
-                          onClick={() => stopChecking(order.id, supplierId)}
-                          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-50 transition"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    )}
-                    {sStatus === 'sent' && !isChecking && (
-                      <button
-                        onClick={() => updateSupplierStatus(order.id, supplierId, 'received')}
-                        className="flex items-center gap-1.5 border border-green-300 text-green-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-green-50 transition"
-                      >
-                        <Check size={12} strokeWidth={2} />
-                        Mark received
-                      </button>
-                    )}
-                    {sStatus !== 'draft' && !isChecking && (
-                      <button
-                        onClick={() => updateSupplierStatus(order.id, supplierId, 'draft')}
-                        className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-50 transition"
-                      >
-                        <Clock size={12} strokeWidth={2} />
-                        Back to draft
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {grouped.map(([sid, { supplierName, items }]) => renderSupplierSection(order, sid, supplierName, items))}
           </div>
         )}
       </div>
@@ -536,12 +365,68 @@ export function OrdersView({
 
   return (
     <div className="space-y-4">
+      {/* Not delivered — needs the owner's attention */}
+      {issues.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-xs uppercase tracking-widest text-red-700 font-medium">
+            <AlertTriangle size={14} strokeWidth={2} />
+            Not delivered ({issues.length})
+          </h2>
+          {issues.map(({ order, supplierId, supplierName, delivery }) => {
+            const supplier = supplierId === NO_SUPPLIER ? undefined : supplierById[supplierId];
+            const message = buildMissingMessage(supplier, supplierName, delivery);
+            const wa = whatsappNumber(supplier?.phone);
+            const key = `missing:${keyOf(order.id, supplierId)}`;
+            return (
+              <div key={key} className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <h3 className="font-medium text-sm text-red-900">{supplierName}</h3>
+                    <p className="text-xs text-red-800/80">
+                      Checked in {shortDate(delivery.received_at)}{delivery.received_by ? ` by ${delivery.received_by}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <ul className="bg-white border border-red-100 rounded divide-y divide-red-50 mb-3">
+                  {delivery.missing.map((m) => (
+                    <li key={m.name} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <span className="text-sm min-w-0">{m.name}</span>
+                      <span className="text-sm font-bold text-red-700 shrink-0">{m.qty} {m.unit}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`https://wa.me/${wa ?? ''}?text=${encodeURIComponent(message)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(btn, 'bg-[#25D366] text-white hover:bg-[#1fb957]')}
+                  >
+                    <MessageCircle size={13} strokeWidth={2} />
+                    WhatsApp supplier
+                  </a>
+                  <button onClick={() => copy(message, key)} className={cn(btnOutline, copiedKey === key && 'border-green-500 text-green-700')}>
+                    {copiedKey === key ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={2} />}
+                    {copiedKey === key ? 'Copied' : 'Copy'}
+                  </button>
+                  <button onClick={() => resolveMissing(order, supplierId, 'reordered')} className={cn(btn, 'bg-ink text-cream hover:bg-neutral-800')}>
+                    <ShoppingCart size={13} strokeWidth={2} />
+                    Add to next order
+                  </button>
+                  <button onClick={() => resolveMissing(order, supplierId, 'dismissed')} className={btnOutline}>
+                    <X size={13} strokeWidth={2} />
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
       {receivedIds.length > 0 && (
         <div className="flex justify-end">
-          <button
-            onClick={() => setArchived(receivedIds, true)}
-            className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
-          >
+          <button onClick={() => setArchived(receivedIds, true)} className={btnOutline}>
             <Archive size={12} strokeWidth={2} />
             Archive received ({receivedIds.length})
           </button>
@@ -574,42 +459,6 @@ export function OrdersView({
               {archivedOrders.map(renderOrder)}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Missing items popup */}
-      {missingAlert && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setMissingAlert(null)}>
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-100">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={16} className="text-amber-500" />
-                <h3 className="font-medium text-sm">Missing items — {missingAlert.supplierName}</h3>
-              </div>
-              <button onClick={() => setMissingAlert(null)} className="text-neutral-400 hover:text-neutral-600 transition">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-4">
-              <p className="text-xs text-neutral-500 mb-3">
-                These items were not in the delivery. They have been added to a new order. Copy the text below and send it via WhatsApp.
-              </p>
-              <pre className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 text-sm whitespace-pre-wrap font-sans leading-relaxed">
-                {missingAlert.text}
-              </pre>
-              <button
-                onClick={() => { navigator.clipboard.writeText(missingAlert.text); setCopied(true); }}
-                className={cn(
-                  'mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium uppercase tracking-widest transition',
-                  copied
-                    ? 'bg-green-600 text-white'
-                    : 'bg-ink text-cream hover:bg-neutral-800'
-                )}
-              >
-                {copied ? <><Check size={14} strokeWidth={2} /> Copied!</> : <><Copy size={14} strokeWidth={2} /> Copy for WhatsApp</>}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

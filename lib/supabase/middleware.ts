@@ -3,11 +3,14 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { parseManagerEmails, resolveRole } from '@/lib/role-logic';
 
 // Employees may only use these (managers get everything).
-const EMPLOYEE_PAGES = ['/dashboard/schedule'];
+const EMPLOYEE_PAGES = ['/dashboard/schedule', '/dashboard/orders'];
 function employeeApiAllowed(pathname: string, method: string): boolean {
   if (pathname.startsWith('/api/shifts') && method === 'GET') return true;
   if (pathname.startsWith('/api/time-off') && (method === 'GET' || method === 'POST')) return true;
   if (pathname.startsWith('/api/team') && method === 'GET') return true;
+  // Deliveries: see orders and check in what arrived — nothing else on orders
+  if (pathname === '/api/orders' && method === 'GET') return true;
+  if (pathname === '/api/orders/receive' && method === 'POST') return true;
   return false;
 }
 

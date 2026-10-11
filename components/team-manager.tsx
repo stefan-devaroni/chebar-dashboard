@@ -41,6 +41,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
   const [role, setRole] = useState<'owner' | 'manager' | 'employee'>('employee');
   const [department, setDepartment] = useState<'foh' | 'kitchen'>('foh');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   function openNew() {
     setEditing(null);
@@ -48,6 +49,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
     setRole('employee');
     setDepartment('foh');
     setEmail('');
+    setPassword('');
     setShowForm(true);
   }
 
@@ -57,13 +59,23 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
     setRole(m.role);
     setDepartment(m.department || 'foh');
     setEmail(m.email ?? '');
+    setPassword('');
     setShowForm(true);
   }
 
   async function handleSave() {
     if (!name.trim()) return;
+    if (password && !email.trim()) {
+      setError('Add a login email to set a password.');
+      return;
+    }
+    if (password && password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     setSaving(true);
     setError(null);
+    let savedId: string | null = editing?.id ?? null;
 
     try {
       if (editing) {
@@ -79,6 +91,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
           return;
         }
         setMembers((prev) => prev.map((m) => (m.id === data.id ? data : m)));
+        savedId = data.id;
       } else {
         const res = await fetch('/api/team', {
           method: 'POST',
@@ -92,6 +105,21 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
           return;
         }
         setMembers((prev) => [...prev, data]);
+        savedId = data.id;
+      }
+
+      if (password) {
+        const res = await fetch('/api/team/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ memberId: savedId, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(`Saved, but the password was not set: ${data.error || 'unknown error'}`);
+          setSaving(false);
+          return;
+        }
       }
       setShowForm(false);
     } catch {
@@ -226,9 +254,28 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
                   className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
                 />
                 <p className="text-[11px] text-neutral-400 mt-1">
-                  Links a dashboard login to this person. Employees see the schedule and can request time off; managers and owners get full access.
+                  Links a dashboard login to this person. Employees see the schedule and deliveries; managers and owners get full access.
                 </p>
               </div>
+
+              {email.trim() && (
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">
+                    {editing?.email ? 'New login password (optional)' : 'Login password'}
+                  </label>
+                  <input
+                    type="text"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="off"
+                    placeholder="At least 8 characters"
+                    className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                  />
+                  <p className="text-[11px] text-neutral-400 mt-1">
+                    They log in with their email and this password. Share it with them in person — leave blank to keep the current one.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Color</label>
