@@ -2,8 +2,10 @@
 
 import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { Plus, Minus, X, Search, Pencil, ArrowRight } from 'lucide-react';
+import { Plus, Minus, X, Search, Pencil, ArrowRight, Table2 } from 'lucide-react';
+import { unitOptions } from '@/lib/units';
 
 interface Supplier {
   id: string;
@@ -46,8 +48,6 @@ const CATEGORIES: Record<string, string> = {
   'other': 'Other',
 };
 
-const UNITS = ['each', 'bottle', 'can', 'case', 'box', 'bag', 'lb', 'gallon', 'quart', 'pint', 'jar', 'container', 'pack', 'sleeve', 'roll', 'flat', 'loaf', 'dozen', 'head', 'bunch', 'wheel', 'tub', 'batch', 'ball'];
-
 const STATIONS = [['bar', 'Bar'], ['kitchen', 'Kitchen'], ['all', 'All']] as const;
 
 const DRAFT_KEY = 'chebar.purchasing.draft';
@@ -80,7 +80,11 @@ export function InventoryManager({
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null');
-      if (saved?.buyQtys) setBuyQtys(saved.buyQtys);
+      if (saved?.buyQtys) {
+        // Drop counts for items that no longer exist
+        const known = new Set(initialItems.map((i) => i.id));
+        setBuyQtys(Object.fromEntries(Object.entries(saved.buyQtys as Record<string, number>).filter(([id]) => known.has(id))));
+      }
       if (saved?.station) setStationFilter(saved.station);
     } catch {}
     setRestored(true);
@@ -229,20 +233,37 @@ export function InventoryManager({
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative mb-5">
-        <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search"
-          className={cn(inputClass, 'pl-11')}
-        />
+      {/* Search + edit toggle */}
+      <div className="flex gap-2 mb-5">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search"
+            className={cn(inputClass, 'pl-11')}
+          />
+        </div>
+        <button
+          onClick={() => setEditMode(!editMode)}
+          className={cn(
+            'flex items-center gap-1.5 px-4 rounded-xl text-sm font-medium transition shrink-0',
+            editMode ? 'bg-ink text-cream' : 'bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-400'
+          )}
+        >
+          {editMode ? 'Done' : <><Pencil size={15} strokeWidth={1.75} />Edit list</>}
+        </button>
       </div>
 
       {editMode && (
-        <div className="grid grid-cols-2 gap-2 mb-5">
+        <p className="text-sm text-neutral-600 px-1 mb-3">
+          Tap an item to change its supplier, backup supplier or how it's delivered.
+        </p>
+      )}
+
+      {editMode && (
+        <div className="grid grid-cols-2 gap-2 mb-3">
           <button
             onClick={() => setItemModal({ item: null })}
             className="flex items-center justify-center gap-1.5 bg-gold text-ink py-3 rounded-xl text-sm font-medium"
@@ -260,10 +281,21 @@ export function InventoryManager({
         </div>
       )}
 
+      {editMode && (
+        <Link
+          href="/dashboard/purchasing/bulk-edit"
+          className="flex items-center gap-2 px-1 mb-5 text-sm text-neutral-600 hover:text-ink"
+        >
+          <Table2 size={16} strokeWidth={1.75} />
+          <span className="underline underline-offset-4">Edit everything in one table</span>
+          <span className="text-neutral-400">— easiest on a computer</span>
+        </Link>
+      )}
+
       {/* Items by category */}
       {grouped.length === 0 ? (
         <div className="bg-white border border-neutral-200 rounded-xl p-10 text-center text-sm text-neutral-500">
-          {items.length === 0 ? 'No items yet. Tap "Edit items & suppliers" below to add some.' : 'Nothing matches your search.'}
+          {items.length === 0 ? 'No items yet. Tap "Edit list" to add some.' : 'Nothing matches your search.'}
         </div>
       ) : (
         <div className="space-y-6">
@@ -275,7 +307,7 @@ export function InventoryManager({
                   <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-medium">
                     {CATEGORIES[category] ?? category}
                   </h2>
-                  {picked > 0 && <span className="text-xs font-medium text-ink">{picked} selected</span>}
+                  {picked > 0 && !editMode && <span className="text-xs font-medium text-ink">{picked} selected</span>}
                 </div>
                 <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100 overflow-hidden">
                   {catItems.map((item) => (
@@ -318,17 +350,13 @@ export function InventoryManager({
         </section>
       )}
 
-      <div className="mt-8 flex justify-center">
-        <button
-          onClick={() => setEditMode(!editMode)}
-          className={cn(
-            'px-5 py-3 rounded-xl text-sm transition',
-            editMode ? 'bg-ink text-cream font-medium' : 'text-neutral-500 hover:text-ink'
-          )}
-        >
-          {editMode ? 'Done editing' : 'Edit items & suppliers'}
-        </button>
-      </div>
+      {editMode && (
+        <div className="mt-8 flex justify-center">
+          <button onClick={() => setEditMode(false)} className="px-6 py-3 rounded-xl text-sm font-medium bg-ink text-cream">
+            Done editing
+          </button>
+        </div>
+      )}
 
       {/* Always-visible send bar (sits above the phone tab bar) */}
       {!editMode && selectedCount > 0 && (
@@ -382,21 +410,30 @@ const ItemRow = memo(function ItemRow({
   const picked = qty > 0;
   const meta = [item.unit_size ? `${item.unit} · ${item.unit_size}` : item.unit, item.supplier?.name].filter(Boolean).join(' · ');
 
+  if (editMode) {
+    return (
+      <button
+        onClick={() => onEdit(item)}
+        className="w-full flex items-center gap-3 pl-4 pr-4 py-2 min-h-[60px] text-left hover:bg-neutral-50 active:bg-neutral-50 transition"
+      >
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] font-medium leading-snug">{item.name}</span>
+          <span className={cn('block text-xs truncate', item.supplier ? 'text-neutral-500' : 'text-red-600')}>
+            {item.supplier ? meta : `${item.unit} · No supplier yet`}
+          </span>
+        </span>
+        <Pencil size={16} strokeWidth={1.75} className="text-neutral-400 shrink-0" />
+      </button>
+    );
+  }
+
   return (
-    <div className={cn('flex items-center gap-3 pl-4 pr-3 py-2 min-h-[60px] transition', picked && !editMode && 'bg-gold/10')}>
+    <div className={cn('flex items-center gap-3 pl-4 pr-3 py-2 min-h-[60px] transition', picked && 'bg-gold/10')}>
       <div className="flex-1 min-w-0">
-        <p className={cn('text-[15px] leading-snug', picked && !editMode ? 'font-semibold' : 'font-medium')}>{item.name}</p>
+        <p className={cn('text-[15px] leading-snug', picked ? 'font-semibold' : 'font-medium')}>{item.name}</p>
         <p className="text-xs text-neutral-500 truncate">{meta}</p>
       </div>
-      {editMode ? (
-        <button
-          onClick={() => onEdit(item)}
-          aria-label={`Edit ${item.name}`}
-          className="w-11 h-11 rounded-full flex items-center justify-center text-neutral-500 active:bg-neutral-100 shrink-0"
-        >
-          <Pencil size={18} strokeWidth={1.75} />
-        </button>
-      ) : picked ? (
+      {picked ? (
         <div className="flex items-center shrink-0">
           <button
             onClick={() => onChange(item.id, -1)}
@@ -517,9 +554,9 @@ function ItemModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelClass}>Ordered per</label>
+            <label className={labelClass}>Delivered as</label>
             <select value={unit} onChange={(e) => setUnit(e.target.value)} className={inputClass}>
-              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              {unitOptions(item?.unit).map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
           <div>
