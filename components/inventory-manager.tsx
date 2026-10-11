@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Plus, Minus, X, Search, ChevronDown, ChevronRight, Truck, Trash2, ClipboardList } from 'lucide-react';
 
@@ -280,6 +281,13 @@ export function InventoryManager({
       {/* Top action bar */}
       <div className="flex flex-wrap gap-2 mb-6">
         {generateOrderButton}
+        <Link
+          href="/dashboard/orders"
+          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"
+        >
+          <ClipboardList size={12} strokeWidth={2} />
+          View orders
+        </Link>
         <button
           onClick={() => setShowAddSupplier(true)}
           className="flex items-center gap-1.5 border border-neutral-300 text-neutral-700 px-3 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-white transition"

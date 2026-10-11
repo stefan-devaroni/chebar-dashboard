@@ -5,15 +5,14 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { LayoutDashboard, CalendarDays, ListChecks, ShoppingCart, ClipboardList, Users, Menu, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ListChecks, ShoppingCart, Users, Menu, X, LogOut } from 'lucide-react';
 
-const allNavItems = [
+const allNavItems: { href: string; label: string; icon: typeof LayoutDashboard; managerOnly: boolean; alsoActiveOn?: string[] }[] = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, managerOnly: true },
+  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, managerOnly: true, alsoActiveOn: ['/dashboard/orders'] },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, managerOnly: false },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, managerOnly: true },
-  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, managerOnly: true },
-  { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList, managerOnly: true },
   { href: '/dashboard/team', label: 'Team', icon: Users, managerOnly: true },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, managerOnly: true },
 ];
 
 export function NavSidebar({ role = 'manager' }: { role?: 'manager' | 'employee' }) {
@@ -47,7 +46,8 @@ export function NavSidebar({ role = 'manager' }: { role?: 'manager' | 'employee'
         {navItems.map((item) => {
           const active =
             pathname === item.href ||
-            (item.href !== '/dashboard' && pathname.startsWith(item.href));
+            (item.href !== '/dashboard' && pathname.startsWith(item.href)) ||
+            (item.alsoActiveOn ?? []).some((p) => pathname.startsWith(p));
           const Icon = item.icon;
           return (
             <Link
