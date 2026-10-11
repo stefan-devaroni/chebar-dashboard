@@ -307,8 +307,8 @@ export function InventoryManager({
               >
                 <span className="flex-1 min-w-0">
                   <span className="block text-[15px] font-medium">{s.name}</span>
-                  <span className={cn('block text-xs truncate', s.phone ? 'text-neutral-500' : 'text-amber-700')}>
-                    {[s.contact_name, s.phone, s.email].filter(Boolean).join(' · ') || 'No phone yet — add one for WhatsApp'}
+                  <span className="block text-xs text-neutral-500 truncate">
+                    {[s.contact_name, s.phone, s.email].filter(Boolean).join(' · ') || 'No contact info yet'}
                   </span>
                 </span>
                 <Pencil size={16} className="text-neutral-400 shrink-0" />
@@ -606,7 +606,7 @@ function SupplierModal({
           <input type="text" value={contactName} onChange={(e) => setContactName(e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>Phone / WhatsApp</label>
+          <label className={labelClass}>Phone</label>
           <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. 583 1234" className={inputClass} />
         </div>
         <div>

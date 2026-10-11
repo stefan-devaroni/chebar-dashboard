@@ -169,12 +169,3 @@ export function buildMissingMessage(supplier: SupplierContact | undefined, suppl
   const lines = delivery.missing.map((m) => `• ${formatQty(m, m.qty)}`).join('\n');
   return `${greeting}\n\nOur delivery on ${shortDate(delivery.received_at)} was missing:\n\n${lines}\n\nCan you bring these with the next delivery? Thank you!`;
 }
-
-// wa.me needs the full international number; 7-digit numbers are Aruban locals
-export function whatsappNumber(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  let digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('00')) digits = digits.slice(2);
-  if (digits.length === 7) digits = '297' + digits;
-  return digits.length >= 8 ? digits : null;
-}

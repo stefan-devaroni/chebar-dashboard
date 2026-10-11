@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Truck, ClipboardCheck, CheckCircle2, AlertTriangle, PackageOpen } from 'lucide-react';
 import { DeliveryChecklist } from '@/components/delivery-checklist';
@@ -8,6 +9,7 @@ import { pendingDeliveries, recentCheckIns, shortDate, type PurchaseOrder } from
 
 // Employee view: deliveries waiting to be checked in, and what was checked in lately.
 export function DeliveriesView({ initialOrders }: { initialOrders: PurchaseOrder[] }) {
+  const router = useRouter();
   const [orders, setOrders] = useState<PurchaseOrder[]>(initialOrders);
   const [checkingKey, setCheckingKey] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<{ supplierName: string; missing: number } | null>(null);
@@ -20,6 +22,7 @@ export function DeliveriesView({ initialOrders }: { initialOrders: PurchaseOrder
     setCheckingKey(null);
     setLastSaved({ supplierName, missing: updated.deliveries?.[supplierId]?.missing.length ?? 0 });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    router.refresh();
   }
 
   return (
