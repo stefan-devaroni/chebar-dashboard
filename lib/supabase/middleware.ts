@@ -36,6 +36,14 @@ export async function updateSession(request: NextRequest) {
   // Refresh session if expired
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Any response other than supabaseResponse must carry over the cookies getUser()
+  // may have just refreshed — otherwise the rotated session is lost and the user
+  // gets logged out on a later request.
+  const withSession = (res: NextResponse) => {
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
+  };
+
   const url = request.nextUrl.clone();
   const isDashboard = url.pathname.startsWith('/dashboard');
   // The email-ingest webhook carries its own shared secret
@@ -69,30 +77,32 @@ export async function updateSession(request: NextRequest) {
 
     if (!role) {
       if (isProtectedApi) {
-        return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+        return withSession(NextResponse.json({ error: 'Not authorized' }, { status: 403 }));
       }
       await supabase.auth.signOut();
       url.pathname = '/login';
       url.searchParams.set('error', 'not_allowed');
-      return NextResponse.redirect(url);
+      // signOut() queued cookie deletions on supabaseResponse — send them with the redirect
+      return withSession(NextResponse.redirect(url));
     }
 
     if (role === 'employee') {
       if (isProtectedApi && !employeeApiAllowed(url.pathname, request.method)) {
-        return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+        return withSession(NextResponse.json({ error: 'Managers only' }, { status: 403 }));
       }
       if (isDashboard && !EMPLOYEE_PAGES.some((p) => url.pathname.startsWith(p))) {
         url.pathname = '/dashboard/schedule';
         url.search = '';
-        return NextResponse.redirect(url);
+        return withSession(NextResponse.redirect(url));
       }
     }
   }
 
-  // If user already signed in, redirect /login to /dashboard
-  if (user && url.pathname === '/login') {
+  // If user already signed in, redirect /login to /dashboard — but not when
+  // /login is showing an error, or a denied user would loop between the two
+  if (user && url.pathname === '/login' && !url.searchParams.has('error')) {
     url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+    return withSession(NextResponse.redirect(url));
   }
 
   return supabaseResponse;

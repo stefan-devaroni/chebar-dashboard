@@ -1,36 +1,39 @@
 import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 
-export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get('code');
+export async function GET(request: NextRequest) {
+  const code = request.nextUrl.searchParams.get('code');
   // Only same-site paths — '//host' or '@host' would turn this into an open redirect
-  const nextParam = searchParams.get('next') ?? '/dashboard';
+  const nextParam = request.nextUrl.searchParams.get('next') ?? '/dashboard';
   const next = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/dashboard';
 
+  let target = '/login?error=auth_failed';
+  const pendingCookies: { name: string; value: string; options?: any }[] = [];
+
   if (code) {
-    // Must be cookie-bound: the magic-link PKCE verifier lives in a cookie set by
-    // the browser client, and the resulting session has to be written back as cookies.
-    const cookieStore = cookies();
+    // Cookie-bound: the magic-link PKCE verifier lives in a cookie set by the
+    // browser client, and the new session must be written back as cookies.
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll() {
-            return cookieStore.getAll();
+            return request.cookies.getAll();
           },
           setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+            pendingCookies.push(...cookiesToSet);
           },
         },
       }
     );
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
-    }
+    if (!error) target = next;
   }
-  return NextResponse.redirect(`${origin}/login?error=auth_failed`);
+
+  // Relative Location: on Netlify, request.url carries the internal
+  // main--*.netlify.app host, which would strand the user on the wrong domain.
+  const response = new NextResponse(null, { status: 307, headers: { Location: target } });
+  pendingCookies.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+  return response;
 }
