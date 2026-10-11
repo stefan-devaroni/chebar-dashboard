@@ -1,5 +1,15 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { parseManagerEmails, resolveRole } from '@/lib/role-logic';
+
+// Employees may only use these (managers get everything).
+const EMPLOYEE_PAGES = ['/dashboard/schedule'];
+function employeeApiAllowed(pathname: string, method: string): boolean {
+  if (pathname.startsWith('/api/shifts') && method === 'GET') return true;
+  if (pathname.startsWith('/api/time-off') && (method === 'GET' || method === 'POST')) return true;
+  if (pathname.startsWith('/api/team') && method === 'GET') return true;
+  return false;
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -27,31 +37,53 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const url = request.nextUrl.clone();
-
-  // Protect API routes (except the email-ingest webhook, which carries its own secret)
+  const isDashboard = url.pathname.startsWith('/dashboard');
+  // The email-ingest webhook carries its own shared secret
   const isProtectedApi = url.pathname.startsWith('/api') && !url.pathname.startsWith('/api/ingest-email');
+
   if (!user && isProtectedApi) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
-
-  // Protect /dashboard routes
-  if (!user && url.pathname.startsWith('/dashboard')) {
+  if (!user && isDashboard) {
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // Enforce email allowlist
-  if (user && (url.pathname.startsWith('/dashboard') || isProtectedApi)) {
-    const allowed = process.env.ALLOWED_EMAILS;
-    if (allowed) {
-      const allowedList = allowed.split(',').map((e) => e.trim().toLowerCase());
-      if (!allowedList.includes(user.email?.toLowerCase() ?? '')) {
-        if (isProtectedApi) {
-          return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
-        }
-        await supabase.auth.signOut();
-        url.pathname = '/login';
-        url.searchParams.set('error', 'not_allowed');
+  if (user && (isDashboard || isProtectedApi)) {
+    const email = user.email?.toLowerCase() ?? '';
+
+    // Managers: emails in ALLOWED_EMAILS (owner, co-owner, GM), or a team member
+    // with role owner/manager. Employees: team members with a linked email.
+    const managerEmails = parseManagerEmails(process.env.ALLOWED_EMAILS);
+    let member: { role: string; active: boolean | null } | null = null;
+    if (!managerEmails.includes(email)) {
+      // Errors (e.g. email column not migrated yet) leave member null => allowlist only
+      const { data } = await supabase
+        .from('team_members')
+        .select('role, active')
+        .eq('email', email)
+        .maybeSingle();
+      member = data;
+    }
+    const role = resolveRole(email, managerEmails, member);
+
+    if (!role) {
+      if (isProtectedApi) {
+        return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      }
+      await supabase.auth.signOut();
+      url.pathname = '/login';
+      url.searchParams.set('error', 'not_allowed');
+      return NextResponse.redirect(url);
+    }
+
+    if (role === 'employee') {
+      if (isProtectedApi && !employeeApiAllowed(url.pathname, request.method)) {
+        return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+      }
+      if (isDashboard && !EMPLOYEE_PAGES.some((p) => url.pathname.startsWith(p))) {
+        url.pathname = '/dashboard/schedule';
+        url.search = '';
         return NextResponse.redirect(url);
       }
     }

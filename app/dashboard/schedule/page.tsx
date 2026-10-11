@@ -1,14 +1,17 @@
 import { createClient } from '@/lib/supabase/server';
 import { WeeklySchedule } from '@/components/weekly-schedule';
+import { getSessionInfo } from '@/lib/roles';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SchedulePage() {
   const supabase = createClient();
+  const session = await getSessionInfo().catch(() => null);
+  const role = session?.role ?? 'employee';
 
   const { data: members } = await supabase
     .from('team_members')
-    .select('*')
+    .select('id, name, role, color, active, department')
     .eq('active', true)
     .order('name');
 
@@ -38,6 +41,8 @@ export default async function SchedulePage() {
         initialShifts={shifts ?? []}
         members={members ?? []}
         initialWeekStart={mondayStr}
+        role={role}
+        selfMemberId={session?.memberId ?? null}
       />
     </div>
   );

@@ -11,6 +11,7 @@ interface TeamMember {
   department: 'foh' | 'kitchen';
   color: string;
   active: boolean;
+  email?: string | null;
 }
 
 const DEPT_COLORS: Record<string, string> = {
@@ -39,12 +40,14 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
   const [name, setName] = useState('');
   const [role, setRole] = useState<'owner' | 'manager' | 'employee'>('employee');
   const [department, setDepartment] = useState<'foh' | 'kitchen'>('foh');
+  const [email, setEmail] = useState('');
 
   function openNew() {
     setEditing(null);
     setName('');
     setRole('employee');
     setDepartment('foh');
+    setEmail('');
     setShowForm(true);
   }
 
@@ -53,6 +56,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
     setName(m.name);
     setRole(m.role);
     setDepartment(m.department || 'foh');
+    setEmail(m.email ?? '');
     setShowForm(true);
   }
 
@@ -66,7 +70,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
         const res = await fetch('/api/team', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: editing.id, name: name.trim(), role, department, color: DEPT_COLORS[department], active: editing.active }),
+          body: JSON.stringify({ id: editing.id, name: name.trim(), role, department, color: DEPT_COLORS[department], active: editing.active, email: email.trim() || null }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -79,7 +83,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
         const res = await fetch('/api/team', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), role, department, color: DEPT_COLORS[department] }),
+          body: JSON.stringify({ name: name.trim(), role, department, color: DEPT_COLORS[department], email: email.trim() || null }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -139,7 +143,7 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">{m.name}</p>
-                <p className="text-xs text-neutral-500">{ROLE_LABELS[m.role]} · {DEPT_LABELS[m.department] || 'Front of House'}</p>
+                <p className="text-xs text-neutral-500">{ROLE_LABELS[m.role]} · {DEPT_LABELS[m.department] || 'Front of House'}{m.email ? ' · ' + m.email : ''}</p>
               </div>
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
                 <button
@@ -210,6 +214,20 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
                     <option value="kitchen">Kitchen</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Login email (optional)</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. maria@gmail.com"
+                  className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                />
+                <p className="text-[11px] text-neutral-400 mt-1">
+                  Links a dashboard login to this person. Employees see the schedule and can request time off; managers and owners get full access.
+                </p>
               </div>
 
               <div>

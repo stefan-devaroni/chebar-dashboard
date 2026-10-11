@@ -74,11 +74,16 @@ export function WeeklySchedule({
   initialShifts,
   members: initialMembers,
   initialWeekStart,
+  role = 'manager',
+  selfMemberId = null,
 }: {
   initialShifts: Shift[];
   members: TeamMember[];
   initialWeekStart: string;
+  role?: 'manager' | 'employee';
+  selfMemberId?: string | null;
 }) {
+  const isManager = role === 'manager';
   const [shifts, setShifts] = useState<Shift[]>(initialShifts);
   const [members, setMembers] = useState<TeamMember[]>(initialMembers);
   const [weekStart, setWeekStart] = useState(initialWeekStart);
@@ -254,12 +259,14 @@ export function WeeklySchedule({
   }
 
   async function addTimeOff() {
-    if (!toMemberId || !toStart || !toEnd) return;
+    if (!toStart || !toEnd) return;
+    if (isManager && !toMemberId) return;
     const res = await fetch('/api/time-off', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        team_member_id: toMemberId,
+        // employees: API assigns their own member id and forces status 'requested'
+        team_member_id: isManager ? toMemberId : undefined,
         start_date: toStart,
         end_date: toEnd < toStart ? toStart : toEnd,
         reason: toReason.trim() || null,
@@ -287,11 +294,21 @@ export function WeeklySchedule({
   }
 
   function handleSelectDate(date: string) {
+    if (!isManager) return;
     if (selectedMemberId && selectedShift) {
       createShift(selectedMemberId, date, selectedShift);
     } else {
       setSelectedDate(selectedDate === date ? null : date);
     }
+  }
+
+  async function setTimeOffStatus(id: string, status: 'approved' | 'denied') {
+    setTimeOff((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+    await fetch('/api/time-off', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status }),
+    });
   }
 
   function handleSelectMember(id: string) {
@@ -605,12 +622,14 @@ export function WeeklySchedule({
           )}>
             {formatTime(s.start_time)} – {formatTime(s.end_time)}
           </span>
+          {isManager && (
           <button
             onClick={() => removeShift(s.id)}
             className="text-neutral-400 hover:text-red-500 active:text-red-500 transition"
           >
             <X size={14} strokeWidth={2} />
           </button>
+          )}
         </div>
       </div>
     );
@@ -646,6 +665,7 @@ export function WeeklySchedule({
 
       {/* Toolbar */}
       <div className="flex flex-wrap justify-center sm:justify-end gap-2 mb-4">
+        {isManager && (
         <button
           onClick={copyLastWeek}
           disabled={copyingWeek}
@@ -654,6 +674,8 @@ export function WeeklySchedule({
           <Copy size={12} strokeWidth={2} />
           {copyingWeek ? 'Copying...' : 'Copy last week'}
         </button>
+        )}
+        {isManager && (
         <button
           onClick={copyScheduleText}
           className={cn(
@@ -666,6 +688,8 @@ export function WeeklySchedule({
           {copied ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={2} />}
           {copied ? 'Copied!' : 'Copy for WhatsApp'}
         </button>
+        )}
+        {isManager && (
         <button
           onClick={copyStaffLink}
           className={cn(
@@ -678,12 +702,13 @@ export function WeeklySchedule({
           {linkCopied ? <Check size={12} strokeWidth={2} /> : <Link2 size={12} strokeWidth={2} />}
           {linkCopied ? 'Link copied!' : 'Staff link'}
         </button>
+        )}
         <button
           onClick={() => setShowTimeOff(true)}
           className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest hover:bg-white transition"
         >
           <CalendarOff size={12} strokeWidth={2} />
-          Time off
+          {isManager ? 'Time off' : 'Request time off'}
         </button>
       </div>
 
@@ -912,6 +937,7 @@ export function WeeklySchedule({
                             )}
                           >
                             <span className="truncate flex-1 leading-tight">{getMemberName(s.team_member_id)}</span>
+                            {isManager && (
                             <button
                               onClick={(e) => { e.stopPropagation(); removeShift(s.id); }}
                               className="text-neutral-400 hover:text-red-500 active:text-red-500 transition shrink-0 ml-0.5 sm:opacity-0 sm:group-hover:opacity-100"
@@ -919,6 +945,7 @@ export function WeeklySchedule({
                               <X size={8} strokeWidth={2} className="sm:hidden" />
                               <X size={10} strokeWidth={2} className="hidden sm:block" />
                             </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -943,6 +970,7 @@ export function WeeklySchedule({
                             )}
                           >
                             <span className="truncate flex-1 leading-tight">{getMemberName(s.team_member_id)}</span>
+                            {isManager && (
                             <button
                               onClick={(e) => { e.stopPropagation(); removeShift(s.id); }}
                               className="text-neutral-400 hover:text-red-500 active:text-red-500 transition shrink-0 ml-0.5 sm:opacity-0 sm:group-hover:opacity-100"
@@ -950,6 +978,7 @@ export function WeeklySchedule({
                               <X size={8} strokeWidth={2} className="sm:hidden" />
                               <X size={10} strokeWidth={2} className="hidden sm:block" />
                             </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -963,7 +992,8 @@ export function WeeklySchedule({
       </div>
       )}
 
-      {/* Step 1: Team members */}
+      {/* Steps 1-3: assignment controls — managers only */}
+      {isManager && (<>
       <div className="mt-4 sm:mt-6 bg-white border border-neutral-200 rounded-xl p-3 sm:p-4">
         <div className="flex items-center justify-between mb-2 sm:mb-3">
           <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-500 font-medium">1. Select team member</h3>
@@ -1163,9 +1193,10 @@ export function WeeklySchedule({
           </p>
         </div>
       )}
+      </>)}
 
       {/* Schedule warnings — scoped to the visible day/week */}
-      {visibleWarnings.length > 0 && (
+      {isManager && visibleWarnings.length > 0 && (
         <div className="space-y-1.5 mt-4 sm:mt-6">
           <h3 className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-400 font-medium">
             {view === 'day' ? 'Warnings for this day' : 'Warnings for this week'}
@@ -1195,13 +1226,17 @@ export function WeeklySchedule({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-xl">Time off</h2>
+              <h2 className="font-display text-xl">{isManager ? 'Time off' : 'Request time off'}</h2>
               <button onClick={() => setShowTimeOff(false)} className="text-neutral-400 hover:text-ink transition">
                 <X size={18} strokeWidth={1.5} />
               </button>
             </div>
 
-            {timeOffUnavailable ? (
+            {!isManager && !selfMemberId ? (
+              <p className="text-sm text-neutral-500">
+                Your login isn&apos;t linked to a team member yet — ask your manager to add your email on the Team page.
+              </p>
+            ) : timeOffUnavailable ? (
               <p className="text-sm text-neutral-500">
                 Time off isn&apos;t set up yet — run <code className="text-xs bg-white px-1 py-0.5 rounded border border-neutral-200">supabase/availability.sql</code> in the Supabase SQL Editor first.
               </p>
@@ -1209,6 +1244,7 @@ export function WeeklySchedule({
               <>
                 {/* Add form */}
                 <div className="space-y-3 mb-5">
+                  {isManager ? (
                   <div>
                     <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Team member</label>
                     <select
@@ -1222,6 +1258,11 @@ export function WeeklySchedule({
                       ))}
                     </select>
                   </div>
+                  ) : (
+                  <p className="text-xs text-neutral-500">
+                    Pick your dates below — your manager will approve the request.
+                  </p>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">From</label>
@@ -1255,44 +1296,82 @@ export function WeeklySchedule({
                   </div>
                   <button
                     onClick={addTimeOff}
-                    disabled={!toMemberId || !toStart || !toEnd}
+                    disabled={(isManager && !toMemberId) || !toStart || !toEnd}
                     className="w-full bg-ink text-cream py-2.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition disabled:opacity-40"
                   >
-                    Add time off
+                    {isManager ? 'Add time off' : 'Submit request'}
                   </button>
                 </div>
 
                 {/* Existing entries */}
-                {timeOff.length === 0 ? (
-                  <p className="text-xs text-neutral-400 text-center">No time off scheduled</p>
-                ) : (
+                {(() => {
+                  const visible = isManager ? timeOff : timeOff.filter((t) => t.team_member_id === selfMemberId);
+                  if (visible.length === 0) {
+                    return <p className="text-xs text-neutral-400 text-center">No time off {isManager ? 'scheduled' : 'requested yet'}</p>;
+                  }
+                  return (
                   <div className="space-y-1.5">
-                    <h3 className="text-[10px] uppercase tracking-widest text-neutral-400 mb-2">Scheduled time off</h3>
-                    {timeOff.map((t) => {
+                    <h3 className="text-[10px] uppercase tracking-widest text-neutral-400 mb-2">
+                      {isManager ? 'Requests & scheduled time off' : 'Your requests'}
+                    </h3>
+                    {visible.map((t) => {
                       const from = new Date(t.start_date + 'T00:00:00');
                       const to = new Date(t.end_date + 'T00:00:00');
                       const sameDay = t.start_date === t.end_date;
                       return (
-                        <div key={t.id} className="flex items-center gap-2 bg-white border border-neutral-200 rounded-lg px-3 py-2">
+                        <div key={t.id} className={cn(
+                          'flex items-center gap-2 bg-white border rounded-lg px-3 py-2',
+                          t.status === 'requested' ? 'border-amber-300' : 'border-neutral-200'
+                        )}>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{getMemberName(t.team_member_id)}</p>
+                            <p className="text-sm font-medium truncate">
+                              {getMemberName(t.team_member_id)}
+                              {t.status === 'requested' && (
+                                <span className="ml-2 text-[9px] uppercase tracking-widest bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Requested</span>
+                              )}
+                              {t.status === 'denied' && (
+                                <span className="ml-2 text-[9px] uppercase tracking-widest bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Denied</span>
+                              )}
+                              {!isManager && t.status === 'approved' && (
+                                <span className="ml-2 text-[9px] uppercase tracking-widest bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Approved</span>
+                              )}
+                            </p>
                             <p className="text-xs text-neutral-500">
                               {from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               {!sameDay && ` – ${to.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
                               {t.reason && <span className="text-neutral-400"> · {t.reason}</span>}
                             </p>
                           </div>
-                          <button
-                            onClick={() => removeTimeOff(t.id)}
-                            className="p-1.5 text-neutral-300 hover:text-red-500 transition shrink-0"
-                          >
-                            <Trash2 size={14} strokeWidth={1.5} />
-                          </button>
+                          {isManager && t.status === 'requested' && (
+                            <>
+                              <button
+                                onClick={() => setTimeOffStatus(t.id, 'approved')}
+                                className="px-2.5 py-1.5 bg-green-600 text-white rounded text-[10px] uppercase tracking-widest hover:bg-green-700 transition shrink-0"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => setTimeOffStatus(t.id, 'denied')}
+                                className="px-2.5 py-1.5 border border-neutral-300 text-neutral-600 rounded text-[10px] uppercase tracking-widest hover:bg-neutral-50 transition shrink-0"
+                              >
+                                Deny
+                              </button>
+                            </>
+                          )}
+                          {isManager && t.status !== 'requested' && (
+                            <button
+                              onClick={() => removeTimeOff(t.id)}
+                              className="p-1.5 text-neutral-300 hover:text-red-500 transition shrink-0"
+                            >
+                              <Trash2 size={14} strokeWidth={1.5} />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                )}
+                  );
+                })()}
               </>
             )}
           </div>

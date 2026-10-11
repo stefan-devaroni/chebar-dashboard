@@ -23,8 +23,11 @@ function LoginForm() {
   const [magicSent, setMagicSent] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get('error') === 'not_allowed') {
+    const err = searchParams.get('error');
+    if (err === 'not_allowed') {
       setError('Your email is not authorized to access this dashboard. Contact the owner.');
+    } else if (err === 'auth_failed') {
+      setError('That login link expired or was already used. Enter your email to get a new one.');
     }
   }, [searchParams]);
 

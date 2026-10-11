@@ -2,21 +2,32 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, CalendarDays, ShoppingCart, ClipboardList, Megaphone, Menu, X } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { LayoutDashboard, CalendarDays, ShoppingCart, ClipboardList, Megaphone, Users, Menu, X, LogOut } from 'lucide-react';
 
-const navItems = [
-  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
-  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays },
-  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart },
-  { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList },
-  { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone },
+const allNavItems = [
+  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, managerOnly: true },
+  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, managerOnly: false },
+  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, managerOnly: true },
+  { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList, managerOnly: true },
+  { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone, managerOnly: true },
+  { href: '/dashboard/team', label: 'Team', icon: Users, managerOnly: true },
 ];
 
-export function NavSidebar() {
+export function NavSidebar({ role = 'manager' }: { role?: 'manager' | 'employee' }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const navItems = allNavItems.filter((i) => role === 'manager' || !i.managerOnly);
+
+  async function signOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  }
 
   const navContent = (
     <>
@@ -58,7 +69,14 @@ export function NavSidebar() {
       </nav>
 
       <div className="px-3 py-6 border-t border-neutral-800">
-        <p className="px-3 text-[10px] uppercase tracking-widest text-neutral-500">Che Bar Aruba</p>
+        <button
+          onClick={signOut}
+          className="flex items-center gap-3 px-3 py-2 rounded text-sm text-neutral-400 hover:text-cream hover:bg-neutral-900 transition w-full"
+        >
+          <LogOut size={16} strokeWidth={1.5} />
+          Sign out
+        </button>
+        <p className="px-3 pt-4 text-[10px] uppercase tracking-widest text-neutral-500">Che Bar Aruba</p>
       </div>
     </>
   );
