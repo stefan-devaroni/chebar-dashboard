@@ -171,6 +171,38 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(data);
   }
 
+  // Remove one supplier's part of an order (e.g. added by mistake); an empty order is deleted
+  if (body.remove_supplier !== undefined) {
+    const order = await loadOrder(supabase, body.id);
+    if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+
+    const items = order.items.filter((i) => supplierKey(i) !== body.remove_supplier);
+    if (items.length === 0) {
+      const { error } = await supabase.from('purchase_orders').delete().eq('id', order.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ deleted: true });
+    }
+
+    const statuses = { ...(order.supplier_statuses ?? {}) };
+    delete statuses[body.remove_supplier];
+    const update: Record<string, unknown> = { items, supplier_statuses: statuses, status: deriveOverallStatus(statuses, items) };
+    if (order.deliveries) {
+      const deliveries = { ...order.deliveries };
+      delete deliveries[body.remove_supplier];
+      update.deliveries = deliveries;
+    }
+
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update(update)
+      .eq('id', order.id)
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
   // Per-supplier status update (mark sent / back to draft)
   if (body.supplier_id !== undefined && body.supplier_status !== undefined) {
     const order = await loadOrder(supabase, body.id);

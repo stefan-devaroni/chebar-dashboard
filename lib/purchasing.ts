@@ -121,6 +121,21 @@ export function pendingDeliveries(orders: PurchaseOrder[]) {
   return out;
 }
 
+// How many supplier sections are waiting to be sent / delivered
+export function stageCounts(orders: PurchaseOrder[]) {
+  let toSend = 0;
+  let waiting = 0;
+  for (const order of orders) {
+    if (order.archived_at) continue;
+    for (const [sid] of groupBySupplier(order.items)) {
+      const status = getSupplierStatus(order, sid);
+      if (status === 'draft') toSend++;
+      else if (status === 'sent') waiting++;
+    }
+  }
+  return { toSend, waiting };
+}
+
 // Deliveries checked in within the last `hours`, newest first
 export function recentCheckIns(orders: PurchaseOrder[], hours = 48) {
   const since = Date.now() - hours * 3600 * 1000;

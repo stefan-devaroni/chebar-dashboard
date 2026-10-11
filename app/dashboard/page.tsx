@@ -1,191 +1,159 @@
-import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
-import { CheckCircle2, ListTodo, Flame, CalendarClock } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Moon, Sun } from 'lucide-react';
+import { createClient } from '@/lib/supabase/server';
+import { openMissing, stageCounts, type PurchaseOrder } from '@/lib/purchasing';
+import { cn } from '@/lib/utils';
 
-export default async function DashboardHome() {
-  const supabase = createClient();
+export const dynamic = 'force-dynamic';
 
-  const { count: totalTasks } = await supabase
-    .from('tasks')
-    .select('*', { count: 'exact', head: true });
-  const { count: doneTasks } = await supabase
-    .from('tasks')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'done');
-  const { count: todoTasks } = await supabase
-    .from('tasks')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'todo');
+interface TodayShift {
+  id: string;
+  start_time: string;
+  end_time: string;
+  shift_type: 'morning' | 'evening';
+  team_members: { name: string; department: string } | null;
+}
 
-  const { data: recent } = await supabase
-    .from('tasks')
-    .select('id, title, completed_at')
-    .eq('status', 'done')
-    .order('completed_at', { ascending: false })
-    .limit(5);
+function shortTime(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  const suffix = h >= 12 ? 'p' : 'a';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${h12}:${String(m).padStart(2, '0')}${suffix}` : `${h12}${suffix}`;
+}
 
-  const { data: fires } = await supabase
-    .from('tasks')
-    .select('id, title, subcategory_id, subcategories!inner(name, category_id, categories!inner(name, icon))')
-    .eq('status', 'todo')
-    .limit(5);
-
-  // Due this week: tasks with a due_date between today and end of this week (Sunday)
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
-  const endOfWeek = new Date(today);
-  endOfWeek.setDate(today.getDate() + (7 - today.getDay()));
-  const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
-
-  const { data: dueThisWeek } = await supabase
-    .from('tasks')
-    .select('id, title, due_date, status, subcategories!inner(name, categories!inner(name, icon))')
-    .neq('status', 'done')
-    .gte('due_date', todayStr)
-    .lte('due_date', endOfWeekStr)
-    .order('due_date', { ascending: true })
-    .limit(10);
-
-  const progress = totalTasks ? Math.round(((doneTasks ?? 0) / totalTasks) * 100) : 0;
-
+function Card({ title, href, children }: { title: string; href: string; children: React.ReactNode }) {
   return (
-    <div>
-      <header className="mb-10">
-        <p className="text-xs uppercase tracking-widest text-neutral-500 mb-2">
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-        </p>
-        <h1 className="font-display text-4xl">Che Bar Dashboard</h1>
-      </header>
-
-      {/* Metric cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-        <MetricCard
-          icon={<ListTodo size={18} strokeWidth={1.5} />}
-          label="Tasks remaining"
-          value={todoTasks ?? 0}
-        />
-        <MetricCard
-          icon={<CheckCircle2 size={18} strokeWidth={1.5} />}
-          label="Completed"
-          value={doneTasks ?? 0}
-          subtext={`${progress}% of ${totalTasks ?? 0}`}
-        />
-        <MetricCard
-          icon={<Flame size={18} strokeWidth={1.5} />}
-          label="Days to June 1"
-          value={Math.max(0, Math.ceil((new Date('2026-06-01').getTime() - Date.now()) / (1000 * 60 * 60 * 24)))}
-          subtext="Menu / hours launch"
-        />
+    <Link href={href} className="block bg-white border border-neutral-200 rounded-xl p-4 hover:border-neutral-400 transition">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-medium">{title}</h2>
+        <ChevronRight size={16} strokeWidth={1.75} className="text-neutral-400" />
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Today's focus */}
-        <section className="bg-white border border-neutral-200 rounded p-6">
-          <h2 className="font-display text-xl mb-4">Open tasks</h2>
-          {fires && fires.length > 0 ? (
-            <ul className="space-y-3">
-              {fires.map((task: any) => (
-                <li key={task.id} className="text-sm">
-                  <div className="text-neutral-900">{task.title}</div>
-                  <div className="text-xs text-neutral-500 mt-0.5">
-                    {task.subcategories?.categories?.name} · {task.subcategories?.name}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500">All clear.</p>
-          )}
-          <Link
-            href="/dashboard/tasks"
-            className="inline-block mt-4 text-xs uppercase tracking-widest text-neutral-600 hover:text-ink"
-          >
-            View all tasks →
-          </Link>
-        </section>
-
-        {/* Recent completions */}
-        <section className="bg-white border border-neutral-200 rounded p-6">
-          <h2 className="font-display text-xl mb-4">Recently completed</h2>
-          {recent && recent.length > 0 ? (
-            <ul className="space-y-3">
-              {recent.map((task) => (
-                <li key={task.id} className="text-sm flex items-start gap-2">
-                  <CheckCircle2 size={14} className="text-gold mt-0.5 shrink-0" strokeWidth={1.5} />
-                  <div>
-                    <div className="text-neutral-700 line-through decoration-neutral-300">
-                      {task.title}
-                    </div>
-                    {task.completed_at && (
-                      <div className="text-xs text-neutral-500 mt-0.5">
-                        {new Date(task.completed_at).toLocaleDateString()}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-500">Nothing yet — check off a task to see it here.</p>
-          )}
-        </section>
-      </div>
-
-      {/* Due this week */}
-      <section className="bg-white border border-neutral-200 rounded p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <CalendarClock size={18} className="text-gold" strokeWidth={1.5} />
-          <h2 className="font-display text-xl">Due this week</h2>
-        </div>
-        {dueThisWeek && dueThisWeek.length > 0 ? (
-          <ul className="space-y-2">
-            {dueThisWeek.map((task: any) => (
-              <li key={task.id} className="flex items-center justify-between text-sm py-2 border-b border-neutral-100 last:border-b-0">
-                <div>
-                  <span className="text-neutral-900">{task.title}</span>
-                  <span className="text-xs text-neutral-500 ml-2">
-                    {task.subcategories?.categories?.icon} {task.subcategories?.categories?.name}
-                  </span>
-                </div>
-                <span className="text-xs text-neutral-500 shrink-0 ml-4">
-                  {new Date(task.due_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-neutral-500">No tasks due this week.</p>
-        )}
-        <Link
-          href="/dashboard/tasks"
-          className="inline-block mt-4 text-xs uppercase tracking-widest text-neutral-600 hover:text-ink"
-        >
-          Manage tasks →
-        </Link>
-      </section>
-    </div>
+      {children}
+    </Link>
   );
 }
 
-function MetricCard({
-  icon,
-  label,
-  value,
-  subtext,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  subtext?: string;
-}) {
+export default async function TodayPage() {
+  const supabase = createClient();
+  // The server runs in UTC; "today" is Aruba's day
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Aruba' }));
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const [{ data: orders }, { data: shifts }, { data: tasks, count: openTasks }] = await Promise.all([
+    supabase.from('purchase_orders').select('*'),
+    supabase
+      .from('shifts')
+      .select('id, start_time, end_time, shift_type, team_members(name, department)')
+      .eq('date', today)
+      .order('start_time'),
+    supabase
+      .from('tasks')
+      .select('id, title, due_date', { count: 'exact' })
+      .neq('status', 'done')
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .limit(3),
+  ]);
+
+  const allOrders = (orders ?? []) as PurchaseOrder[];
+  const issues = openMissing(allOrders);
+  const { toSend, waiting } = stageCounts(allOrders);
+  const todayShifts = (shifts ?? []) as unknown as TodayShift[];
+  const byKitchenLast = (a: TodayShift, b: TodayShift) =>
+    (a.team_members?.department === 'kitchen' ? 1 : 0) - (b.team_members?.department === 'kitchen' ? 1 : 0);
+  const morning = todayShifts.filter((s) => s.shift_type === 'morning').sort(byKitchenLast);
+  const evening = todayShifts.filter((s) => s.shift_type === 'evening').sort(byKitchenLast);
+
+  const stats = [
+    { label: 'To send', value: toSend, tone: 'text-amber-700' },
+    { label: 'On the way', value: waiting, tone: 'text-blue-700' },
+    { label: 'Missing', value: issues.length, tone: 'text-red-700' },
+  ];
+
   return (
-    <div className="bg-white border border-neutral-200 rounded p-6">
-      <div className="flex items-center gap-2 text-neutral-500 mb-3">
-        {icon}
-        <span className="text-xs uppercase tracking-widest">{label}</span>
+    <div className="max-w-2xl">
+      <header className="mb-6">
+        <p className="text-xs uppercase tracking-widest text-neutral-500 mb-1">
+          {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        </p>
+        <h1 className="font-display text-3xl">Today</h1>
+      </header>
+
+      {issues.length > 0 && (
+        <Link
+          href="/dashboard/orders"
+          className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 mb-4 text-sm hover:bg-red-100 transition"
+        >
+          <AlertTriangle size={16} strokeWidth={2} className="shrink-0" />
+          <span className="flex-1">
+            {issues.length === 1
+              ? `${issues[0].supplierName} delivery was missing items`
+              : `${issues.length} deliveries had missing items`}
+          </span>
+          <ChevronRight size={16} strokeWidth={1.75} className="shrink-0" />
+        </Link>
+      )}
+
+      <div className="space-y-4">
+        <Card title="Orders" href="/dashboard/orders">
+          <div className="grid grid-cols-3 gap-2">
+            {stats.map((s) => (
+              <div key={s.label} className="bg-neutral-50 rounded-lg py-3 text-center">
+                <p className={cn('text-2xl font-semibold tabular-nums', s.value > 0 ? s.tone : 'text-neutral-300')}>{s.value}</p>
+                <p className="text-[11px] text-neutral-500 mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card title="Working today" href="/dashboard/schedule">
+          {todayShifts.length === 0 ? (
+            <p className="text-sm text-neutral-500">Nobody is scheduled today.</p>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { label: 'Morning', list: morning, icon: <Sun size={14} className="text-amber-500" /> },
+                { label: 'Evening', list: evening, icon: <Moon size={14} className="text-indigo-400" /> },
+              ].filter((g) => g.list.length > 0).map((g) => (
+                <div key={g.label}>
+                  <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-neutral-400 mb-1.5">{g.icon}{g.label}</p>
+                  <ul className="space-y-1">
+                    {g.list.map((s) => (
+                      <li key={s.id} className="flex items-center justify-between text-sm">
+                        <span className={s.team_members?.department === 'kitchen' ? 'text-orange-700' : 'text-blue-700'}>
+                          {s.team_members?.name ?? '—'}
+                        </span>
+                        <span className="text-neutral-500 tabular-nums">{shortTime(s.start_time)}–{shortTime(s.end_time)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Tasks" href="/dashboard/tasks">
+          {!openTasks ? (
+            <p className="text-sm text-neutral-500">No open tasks.</p>
+          ) : (
+            <>
+              <ul className="space-y-1.5 mb-2">
+                {(tasks ?? []).map((t) => (
+                  <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate">{t.title}</span>
+                    {t.due_date && (
+                      <span className="text-xs text-neutral-500 shrink-0">
+                        {new Date(t.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {openTasks > 3 && <p className="text-xs text-neutral-400">+ {openTasks - 3} more</p>}
+            </>
+          )}
+        </Card>
       </div>
-      <div className="font-display text-3xl">{value}</div>
-      {subtext && <div className="text-xs text-neutral-500 mt-1">{subtext}</div>}
     </div>
   );
 }

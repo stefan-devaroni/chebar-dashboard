@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Plus, X, Pencil, Trash2, UserCircle } from 'lucide-react';
+import { Plus, X, UserCircle, ChevronRight } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -138,174 +138,133 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
     });
     if (res.ok) {
       setMembers((prev) => prev.filter((m) => m.id !== id));
+      setShowForm(false);
     }
   }
 
+  const inputClass = 'w-full px-3 py-3 bg-white border border-neutral-200 rounded-xl text-base focus:outline-none focus:border-gold';
+  const labelClass = 'block text-xs uppercase tracking-wider text-neutral-500 mb-1.5';
+  const choiceClass = (on: boolean) =>
+    cn('py-3 rounded-xl text-sm font-medium transition', on ? 'bg-ink text-cream' : 'bg-white border border-neutral-200 text-neutral-600');
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-neutral-600">{members.length} team member{members.length !== 1 ? 's' : ''}</p>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-1.5 bg-gold text-ink px-4 py-1.5 rounded text-xs uppercase tracking-widest hover:bg-gold/80 transition"
-        >
-          <Plus size={14} strokeWidth={2} />
-          Add member
-        </button>
-      </div>
+    <div className="max-w-2xl">
+      <button
+        onClick={openNew}
+        className="w-full flex items-center justify-center gap-2 bg-gold text-ink py-3 rounded-xl text-sm font-medium mb-4"
+      >
+        <Plus size={16} strokeWidth={2} />
+        Add team member
+      </button>
 
       {members.length === 0 ? (
-        <div className="bg-white border border-neutral-200 rounded p-10 text-center">
+        <div className="bg-white border border-neutral-200 rounded-xl p-10 text-center">
           <UserCircle size={40} className="mx-auto mb-3 text-neutral-300" strokeWidth={1} />
-          <p className="text-sm text-neutral-500">No team members yet. Add your first employee above.</p>
+          <p className="text-sm text-neutral-500">No team members yet.</p>
         </div>
       ) : (
-        <div className="bg-white border border-neutral-200 rounded divide-y divide-neutral-100">
+        <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100 overflow-hidden">
           {members.map((m) => (
-            <div key={m.id} className="flex items-center gap-4 px-5 py-4 group">
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0"
+            <button
+              key={m.id}
+              onClick={() => openEdit(m)}
+              className="w-full flex items-center gap-3 px-4 py-3 min-h-[64px] text-left hover:bg-neutral-50 active:bg-neutral-50 transition"
+            >
+              <span
+                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0"
                 style={{ backgroundColor: DEPT_COLORS[m.department] || DEPT_COLORS.foh }}
               >
                 {m.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{m.name}</p>
-                <p className="text-xs text-neutral-500">{ROLE_LABELS[m.role]} · {DEPT_LABELS[m.department] || 'Front of House'}{m.email ? ' · ' + m.email : ''}</p>
-              </div>
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
-                <button
-                  onClick={() => openEdit(m)}
-                  className="p-1.5 text-neutral-400 hover:text-ink transition rounded"
-                >
-                  <Pencil size={14} strokeWidth={1.5} />
-                </button>
-                <button
-                  onClick={() => handleDelete(m.id)}
-                  className="p-1.5 text-neutral-400 hover:text-red-600 transition rounded"
-                >
-                  <Trash2 size={14} strokeWidth={1.5} />
-                </button>
-              </div>
-            </div>
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[15px] font-medium truncate">{m.name}</span>
+                <span className="block text-xs text-neutral-500 truncate">
+                  {ROLE_LABELS[m.role]} · {DEPT_LABELS[m.department] || 'Front of House'}{m.email ? ` · ${m.email}` : ''}
+                </span>
+              </span>
+              <ChevronRight size={16} className="text-neutral-300 shrink-0" />
+            </button>
           ))}
         </div>
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 px-4" onClick={() => setShowForm(false)}>
+        <div className="fixed inset-0 bg-ink/50 flex items-end sm:items-center justify-center z-50 sm:px-4" onClick={() => setShowForm(false)}>
           <div
-            className="bg-cream border border-neutral-200 rounded-lg w-full max-w-md p-6 shadow-lg"
+            className="bg-cream w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
-              <h2 className="font-display text-xl">{editing ? 'Edit' : 'Add'} team member</h2>
-              <button onClick={() => setShowForm(false)} className="text-neutral-400 hover:text-ink transition">
-                <X size={18} strokeWidth={1.5} />
+              <h2 className="font-display text-xl">{editing ? 'Edit team member' : 'New team member'}</h2>
+              <button onClick={() => setShowForm(false)} aria-label="Close" className="w-10 h-10 -mr-2 flex items-center justify-center text-neutral-400 hover:text-ink">
+                <X size={20} strokeWidth={1.5} />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoFocus
-                  placeholder="e.g. Maria"
-                  className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
-                />
+                <label className={labelClass}>Name</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maria" className={inputClass} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Role</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as any)}
-                    className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
-                  >
-                    <option value="employee">Employee</option>
-                    <option value="manager">Manager</option>
-                    <option value="owner">Owner</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Department</label>
-                  <select
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value as any)}
-                    className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
-                  >
-                    <option value="foh">Front of House</option>
-                    <option value="kitchen">Kitchen</option>
-                  </select>
+              <div>
+                <label className={labelClass}>Works in</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setDepartment('foh')} className={choiceClass(department === 'foh')}>Front of House</button>
+                  <button type="button" onClick={() => setDepartment('kitchen')} className={choiceClass(department === 'kitchen')}>Kitchen</button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Login email (optional)</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. maria@gmail.com"
-                  className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
-                />
-                <p className="text-[11px] text-neutral-400 mt-1">
-                  Links a dashboard login to this person. Employees see the schedule and deliveries; managers and owners get full access.
+                <label className={labelClass}>Access</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['employee', 'manager', 'owner'] as const).map((r) => (
+                    <button key={r} type="button" onClick={() => setRole(r)} className={choiceClass(role === r)}>{ROLE_LABELS[r]}</button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-neutral-500 mt-1.5">
+                  {role === 'employee' ? 'Sees the schedule and checks in deliveries.' : 'Sees and manages everything.'}
                 </p>
+              </div>
+
+              <div>
+                <label className={labelClass}>Login email (optional)</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. maria@gmail.com" className={inputClass} />
               </div>
 
               {email.trim() && (
                 <div>
-                  <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">
-                    {editing?.email ? 'New login password (optional)' : 'Login password'}
-                  </label>
+                  <label className={labelClass}>{editing?.email ? 'New password (optional)' : 'Password'}</label>
                   <input
                     type="text"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="off"
                     placeholder="At least 8 characters"
-                    className="w-full px-3 py-2.5 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                    className={inputClass}
                   />
-                  <p className="text-[11px] text-neutral-400 mt-1">
-                    They log in with their email and this password. Share it with them in person — leave blank to keep the current one.
+                  <p className="text-[11px] text-neutral-500 mt-1.5">
+                    They log in with their email and this password. Tell them in person.{editing?.email ? ' Leave empty to keep the current one.' : ''}
                   </p>
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-1.5">Color</label>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full" style={{ backgroundColor: DEPT_COLORS[department] }} />
-                  <span className="text-xs text-neutral-500">Auto-assigned by department</span>
-                </div>
-              </div>
-
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded px-3 py-2 text-sm text-red-800">
-                  {error}
-                </div>
+                <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-800">{error}</div>
               )}
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !name.trim()}
-                  className="flex-1 bg-ink text-cream py-2.5 rounded text-xs uppercase tracking-widest hover:bg-neutral-800 transition disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : editing ? 'Update' : 'Add member'}
+              <button
+                onClick={handleSave}
+                disabled={saving || !name.trim()}
+                className="w-full bg-ink text-cream py-3.5 rounded-xl text-base font-medium disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : editing ? 'Save' : 'Add team member'}
+              </button>
+              {editing && (
+                <button onClick={() => handleDelete(editing.id)} className="w-full py-3 text-sm text-red-600">
+                  Remove from team
                 </button>
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="px-5 py-2.5 border border-neutral-300 rounded text-xs uppercase tracking-widest hover:bg-white transition"
-                >
-                  Cancel
-                </button>
-              </div>
+              )}
             </div>
           </div>
         </div>

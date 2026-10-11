@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar, AlertTriangle, Copy, Check, CalendarOff, Trash2, Link2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, UserPlus, UserMinus, X, Sun, Moon, Clock, CalendarDays, Calendar, AlertTriangle, Copy, Check, CalendarOff, Trash2, Link2, Share2, MessageCircle } from 'lucide-react';
 import { STAFF_TOKEN } from '@/lib/staff-token';
 
 interface TeamMember {
@@ -110,6 +110,7 @@ export function WeeklySchedule({
 
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [copyingWeek, setCopyingWeek] = useState(false);
   const [showTimeOff, setShowTimeOff] = useState(false);
   const [timeOff, setTimeOff] = useState<TimeOff[]>([]);
@@ -638,79 +639,72 @@ export function WeeklySchedule({
   return (
     <div>
       {/* View toggle */}
-      <div className="flex mb-4 max-w-xs mx-auto sm:max-w-[200px] sm:mx-0 sm:ml-auto">
-        <div className="flex bg-neutral-100 rounded-lg p-0.5 w-full">
+      <div className="grid grid-cols-2 bg-neutral-200/60 rounded-xl p-1 mb-3 sm:max-w-xs">
+        {([['day', 'Day', Calendar], ['week', 'Week', CalendarDays]] as const).map(([v, label, Icon]) => (
           <button
-            onClick={() => setView('day')}
+            key={v}
+            onClick={() => setView(v)}
             className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition',
-              view === 'day' ? 'bg-white text-ink shadow-sm' : 'text-neutral-500'
+              'flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition',
+              view === v ? 'bg-white text-ink shadow-sm' : 'text-neutral-500'
             )}
           >
-            <Calendar size={13} strokeWidth={1.5} />
-            Day
+            <Icon size={15} strokeWidth={1.75} />
+            {label}
           </button>
-          <button
-            onClick={() => setView('week')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition',
-              view === 'week' ? 'bg-white text-ink shadow-sm' : 'text-neutral-500'
-            )}
-          >
-            <CalendarDays size={13} strokeWidth={1.5} />
-            Week
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-wrap justify-center sm:justify-end gap-2 mb-4">
-        {isManager && (
-        <button
-          onClick={copyLastWeek}
-          disabled={copyingWeek}
-          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest hover:bg-white transition disabled:opacity-50"
-        >
-          <Copy size={12} strokeWidth={2} />
-          {copyingWeek ? 'Copying...' : 'Copy last week'}
-        </button>
-        )}
-        {isManager && (
-        <button
-          onClick={copyScheduleText}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest transition',
-            copied
-              ? 'bg-green-600 text-white'
-              : 'border border-neutral-300 text-neutral-600 hover:bg-white'
-          )}
-        >
-          {copied ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={2} />}
-          {copied ? 'Copied!' : 'Copy for WhatsApp'}
-        </button>
-        )}
-        {isManager && (
-        <button
-          onClick={copyStaffLink}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest transition',
-            linkCopied
-              ? 'bg-green-600 text-white'
-              : 'border border-neutral-300 text-neutral-600 hover:bg-white'
-          )}
-        >
-          {linkCopied ? <Check size={12} strokeWidth={2} /> : <Link2 size={12} strokeWidth={2} />}
-          {linkCopied ? 'Link copied!' : 'Staff link'}
-        </button>
-        )}
+      {/* Toolbar: time off + (managers) one menu for the sharing tools */}
+      <div className={cn('grid gap-2 mb-5 sm:max-w-md', isManager ? 'grid-cols-2' : 'grid-cols-1')}>
         <button
           onClick={() => setShowTimeOff(true)}
-          className="flex items-center gap-1.5 border border-neutral-300 text-neutral-600 px-3 py-1.5 rounded text-[10px] sm:text-xs uppercase tracking-widest hover:bg-white transition"
+          className="flex items-center justify-center gap-2 bg-white border border-neutral-200 rounded-xl py-2.5 text-sm font-medium text-neutral-700 hover:border-neutral-400 transition"
         >
-          <CalendarOff size={12} strokeWidth={2} />
+          <CalendarOff size={16} strokeWidth={1.75} />
           {isManager ? 'Time off' : 'Request time off'}
         </button>
+        {isManager && (
+          <div className="relative">
+            <button
+              onClick={() => setShareOpen(!shareOpen)}
+              className="w-full flex items-center justify-center gap-2 bg-white border border-neutral-200 rounded-xl py-2.5 text-sm font-medium text-neutral-700 hover:border-neutral-400 transition"
+            >
+              <Share2 size={16} strokeWidth={1.75} />
+              Share &amp; copy
+              <ChevronDown size={14} strokeWidth={1.75} className="text-neutral-400" />
+            </button>
+            {shareOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShareOpen(false)} />
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-neutral-200 rounded-xl shadow-lg z-40 overflow-hidden divide-y divide-neutral-100">
+                  {([
+                    [Copy, copyingWeek ? 'Copying…' : "Copy last week's shifts", () => copyLastWeek()],
+                    [MessageCircle, 'Copy schedule for WhatsApp', () => copyScheduleText()],
+                    [Link2, 'Copy staff schedule link', () => copyStaffLink()],
+                  ] as const).map(([Icon, label, action]) => (
+                    <button
+                      key={label}
+                      onClick={() => { setShareOpen(false); action(); }}
+                      className="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-left text-neutral-700 hover:bg-neutral-50"
+                    >
+                      <Icon size={16} strokeWidth={1.75} className="text-neutral-400 shrink-0" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
+
+      {(copied || linkCopied) && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(88px+env(safe-area-inset-bottom))] lg:bottom-8 z-50 flex items-center gap-2 bg-ink text-cream text-sm px-4 py-2.5 rounded-full shadow-lg whitespace-nowrap">
+          <Check size={15} strokeWidth={2} />
+          {copied ? 'Schedule copied — paste it in WhatsApp' : 'Staff link copied'}
+        </div>
+      )}
 
       {/* Week navigation — week view only */}
       {view === 'week' && (

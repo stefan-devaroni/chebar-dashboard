@@ -58,7 +58,7 @@ export function DeliveriesView({ initialOrders }: { initialOrders: PurchaseOrder
               const key = `${order.id}:${supplierId}`;
               const isChecking = checkingKey === key;
               return (
-                <div key={key} className={cn('bg-white border rounded-lg p-4', isChecking ? 'border-blue-300' : 'border-neutral-200')}>
+                <div key={key} className={cn('bg-white border rounded-xl p-4', isChecking ? 'border-blue-300' : 'border-neutral-200')}>
                   <div className="flex items-center justify-between gap-3 mb-3">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <Truck size={18} className="text-blue-500 shrink-0" strokeWidth={1.5} />
@@ -69,16 +69,16 @@ export function DeliveriesView({ initialOrders }: { initialOrders: PurchaseOrder
                         </p>
                       </div>
                     </div>
-                    {!isChecking && (
-                      <button
-                        onClick={() => { setCheckingKey(key); setLastSaved(null); }}
-                        className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-xs uppercase tracking-widest hover:bg-blue-700 transition shrink-0"
-                      >
-                        <ClipboardCheck size={15} strokeWidth={2} />
-                        Check
-                      </button>
-                    )}
                   </div>
+                  {!isChecking && (
+                    <button
+                      onClick={() => { setCheckingKey(key); setLastSaved(null); }}
+                      className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3.5 rounded-xl text-base font-medium hover:bg-blue-700 transition"
+                    >
+                      <ClipboardCheck size={18} strokeWidth={2} />
+                      Check delivery
+                    </button>
+                  )}
                   {isChecking && (
                     <DeliveryChecklist
                       orderId={order.id}

@@ -38,7 +38,7 @@ function LoginForm() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
-      setError(error.message);
+      setError(/invalid login credentials/i.test(error.message) ? 'Wrong email or password.' : error.message);
     } else {
       router.push('/dashboard');
       router.refresh();
@@ -88,7 +88,7 @@ function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                className="w-full px-4 py-3.5 bg-white border border-neutral-200 rounded-xl text-base focus:outline-none focus:border-gold"
                 autoComplete="email"
               />
             </div>
@@ -101,7 +101,8 @@ function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-white border border-neutral-200 rounded text-sm focus:outline-none focus:border-gold"
+                required
+                className="w-full px-4 py-3.5 bg-white border border-neutral-200 rounded-xl text-base focus:outline-none focus:border-gold"
                 autoComplete="current-password"
               />
             </div>
@@ -113,17 +114,20 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-ink text-cream py-3 rounded text-sm uppercase tracking-widest hover:bg-neutral-800 transition disabled:opacity-50"
+              className="w-full bg-ink text-cream py-3.5 rounded-xl text-base font-medium hover:bg-neutral-800 transition disabled:opacity-50"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
+            <p className="text-center text-sm text-neutral-500 pt-2">
+              Forgot your password? Ask a manager to set a new one.
+            </p>
             <button
               type="button"
               onClick={handleMagicLink}
               disabled={loading}
-              className="w-full border border-neutral-300 py-3 rounded text-sm uppercase tracking-widest hover:bg-white transition disabled:opacity-50"
+              className="w-full py-2 text-xs text-neutral-400 hover:text-neutral-600 transition disabled:opacity-50"
             >
-              Email me a sign-in link
+              Owner: email me a sign-in link instead
             </button>
           </form>
         )}
