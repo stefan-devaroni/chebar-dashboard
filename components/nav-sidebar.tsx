@@ -5,14 +5,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { LayoutDashboard, CalendarDays, ShoppingCart, ClipboardList, Megaphone, Users, Menu, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ShoppingCart, ClipboardList, Users, Menu, X, LogOut } from 'lucide-react';
 
 const allNavItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, managerOnly: true },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, managerOnly: false },
   { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, managerOnly: true },
   { href: '/dashboard/orders', label: 'Orders', icon: ClipboardList, managerOnly: true },
-  { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone, managerOnly: true },
   { href: '/dashboard/team', label: 'Team', icon: Users, managerOnly: true },
 ];
 
