@@ -30,6 +30,14 @@ const DEPT_LABELS: Record<string, string> = {
   kitchen: 'Kitchen',
 };
 
+// Display order of the groups on the Team tab
+const DEPARTMENTS = ['foh', 'kitchen'] as const;
+
+// Older rows may have no department; they count as Front of House
+function deptOf(m: TeamMember): 'foh' | 'kitchen' {
+  return m.department === 'kitchen' ? 'kitchen' : 'foh';
+}
+
 export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }) {
   const [members, setMembers] = useState<TeamMember[]>(initialMembers);
   const [showForm, setShowForm] = useState(false);
@@ -163,28 +171,52 @@ export function TeamManager({ initialMembers }: { initialMembers: TeamMember[] }
           <p className="text-sm text-neutral-500">No team members yet.</p>
         </div>
       ) : (
-        <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100 overflow-hidden">
-          {members.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => openEdit(m)}
-              className="w-full flex items-center gap-3 px-4 py-3 min-h-[64px] text-left hover:bg-neutral-50 active:bg-neutral-50 transition"
-            >
-              <span
-                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0"
-                style={{ backgroundColor: DEPT_COLORS[m.department] || DEPT_COLORS.foh }}
-              >
-                {m.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-[15px] font-medium truncate">{m.name}</span>
-                <span className="block text-xs text-neutral-500 truncate">
-                  {ROLE_LABELS[m.role]} · {DEPT_LABELS[m.department] || 'Front of House'}{m.email ? ` · ${m.email}` : ''}
-                </span>
-              </span>
-              <ChevronRight size={16} className="text-neutral-300 shrink-0" />
-            </button>
-          ))}
+        <div className="space-y-6">
+          {DEPARTMENTS.map((dept) => {
+            const people = members.filter((m) => deptOf(m) === dept).sort((a, b) => a.name.localeCompare(b.name));
+            return (
+              <section key={dept}>
+                <div className="flex items-center justify-between px-1 mb-2">
+                  <h2 className="flex items-center gap-2 text-xs uppercase tracking-widest text-neutral-500 font-medium">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: DEPT_COLORS[dept] }} />
+                    {DEPT_LABELS[dept]}
+                  </h2>
+                  <span className="text-xs text-neutral-400">
+                    {people.length} {people.length === 1 ? 'person' : 'people'}
+                  </span>
+                </div>
+                {people.length === 0 ? (
+                  <div className="bg-white border border-neutral-200 rounded-xl px-4 py-4 text-sm text-neutral-400">
+                    No one here yet.
+                  </div>
+                ) : (
+                  <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100 overflow-hidden">
+                    {people.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => openEdit(m)}
+                        className="w-full flex items-center gap-3 px-4 py-3 min-h-[64px] text-left hover:bg-neutral-50 active:bg-neutral-50 transition"
+                      >
+                        <span
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0"
+                          style={{ backgroundColor: DEPT_COLORS[dept] }}
+                        >
+                          {m.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[15px] font-medium truncate">{m.name}</span>
+                          <span className="block text-xs text-neutral-500 truncate">
+                            {ROLE_LABELS[m.role]}{m.email ? ` · ${m.email}` : ''}
+                          </span>
+                        </span>
+                        <ChevronRight size={16} className="text-neutral-300 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
 
