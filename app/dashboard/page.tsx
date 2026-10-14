@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { AlertTriangle, ChevronRight, Moon, Sun } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Moon, Sun, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { openMissing, stageCounts, type PurchaseOrder } from '@/lib/purchasing';
+import { arubaNow, formatTime, isActive, toMinutes, type Reservation } from '@/lib/reservations';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -39,7 +40,7 @@ export default async function TodayPage() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Aruba' }));
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  const [{ data: orders }, { data: shifts }, { data: tasks, count: openTasks }] = await Promise.all([
+  const [{ data: orders }, { data: shifts }, { data: tasks, count: openTasks }, { data: bookings, error: bookingsError }] = await Promise.all([
     supabase.from('purchase_orders').select('*'),
     supabase
       .from('shifts')
@@ -52,6 +53,11 @@ export default async function TodayPage() {
       .neq('status', 'done')
       .order('due_date', { ascending: true, nullsFirst: false })
       .limit(3),
+    supabase
+      .from('reservations')
+      .select('id, time, party_size, name, status')
+      .eq('date', today)
+      .order('time'),
   ]);
 
   const allOrders = (orders ?? []) as PurchaseOrder[];
@@ -62,6 +68,14 @@ export default async function TodayPage() {
     (a.team_members?.department === 'kitchen' ? 1 : 0) - (b.team_members?.department === 'kitchen' ? 1 : 0);
   const morning = todayShifts.filter((s) => s.shift_type === 'morning').sort(byKitchenLast);
   const evening = todayShifts.filter((s) => s.shift_type === 'evening').sort(byKitchenLast);
+
+  // Reservations card (hidden until supabase/reservations.sql has been run)
+  const todayBookings = ((bookings ?? []) as Pick<Reservation, 'id' | 'time' | 'party_size' | 'name' | 'status'>[]).filter(isActive);
+  const bookedGuests = todayBookings.reduce((sum, r) => sum + r.party_size, 0);
+  const nowMinutes = arubaNow().minutes;
+  const upcoming = todayBookings
+    .filter((r) => r.status === 'confirmed' && toMinutes(r.time) >= nowMinutes - 30)
+    .slice(0, 3);
 
   const stats = [
     { label: 'To send', value: toSend, tone: 'text-amber-700' },
@@ -94,6 +108,36 @@ export default async function TodayPage() {
       )}
 
       <div className="space-y-4">
+        {!bookingsError && (
+          <Card title="Reservations" href="/dashboard/reservations">
+            {todayBookings.length === 0 ? (
+              <p className="text-sm text-neutral-500">No bookings today.</p>
+            ) : (
+              <>
+                <p className="text-sm text-neutral-600 mb-2">
+                  {todayBookings.length} {todayBookings.length === 1 ? 'booking' : 'bookings'} · {bookedGuests} {bookedGuests === 1 ? 'guest' : 'guests'}
+                </p>
+                {upcoming.length === 0 ? (
+                  <p className="text-xs text-neutral-400">No more arrivals expected today.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {upcoming.map((r) => (
+                      <li key={r.id} className="flex items-center gap-3 text-sm">
+                        <span className="w-[68px] shrink-0 font-medium tabular-nums">{formatTime(r.time)}</span>
+                        <span className="flex-1 min-w-0 truncate">{r.name}</span>
+                        <span className="flex items-center gap-1 text-neutral-500 tabular-nums">
+                          <Users size={13} />
+                          {r.party_size}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </Card>
+        )}
+
         <Card title="Orders" href="/dashboard/orders">
           <div className="grid grid-cols-3 gap-2">
             {stats.map((s) => (

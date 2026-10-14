@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { Sun, CalendarDays, ListChecks, ShoppingCart, Truck, Users, LogOut } from 'lucide-react';
+import { Sun, CalendarCheck, CalendarDays, ListChecks, ShoppingCart, Truck, Users, LogOut } from 'lucide-react';
 
 type Role = 'manager' | 'employee';
 export type NavBadges = { missing: number; pending: number };
@@ -12,6 +12,7 @@ export type NavBadges = { missing: number; pending: number };
 type NavItem = {
   href: string;
   label: string;
+  shortLabel?: string; // phone tab bar, where space is tight
   icon: typeof Sun;
   roles: Role[];
   alsoActiveOn?: string[];
@@ -20,6 +21,7 @@ type NavItem = {
 
 const allNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Today', icon: Sun, roles: ['manager'] },
+  { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, roles: ['manager', 'employee'] },
   { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, roles: ['manager'], alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['manager', 'employee'] },
   { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], badge: 'pending' },
@@ -125,7 +127,7 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
                   <Icon size={22} strokeWidth={active ? 2 : 1.5} />
                   {item.badge && <Badge count={badges[item.badge]} kind={item.badge} className="absolute -top-1.5 -right-3" />}
                 </span>
-                {item.label}
+                {item.shortLabel ?? item.label}
               </Link>
             );
           })}

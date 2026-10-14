@@ -1,6 +1,18 @@
 // Push alerts to the owner's phone via ntfy (https://ntfy.sh).
 // The topic name is the only secret — keep NTFY_TOPIC long and random.
-export async function notifyOwner({ title, message, url }: { title: string; message: string; url?: string }) {
+export async function notifyOwner({
+  title,
+  message,
+  url,
+  tags = ['warning'],
+  priority = 4,
+}: {
+  title: string;
+  message: string;
+  url?: string;
+  tags?: string[];
+  priority?: number;
+}) {
   const topic = process.env.NTFY_TOPIC;
   if (!topic) return;
   try {
@@ -8,10 +20,10 @@ export async function notifyOwner({ title, message, url }: { title: string; mess
     await fetch('https://ntfy.sh/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, title, message, tags: ['warning'], priority: 4, click: url }),
+      body: JSON.stringify({ topic, title, message, tags, priority, click: url }),
       signal: AbortSignal.timeout(5000),
     });
   } catch {
-    // Alerts are best-effort; the "Not delivered" section in the dashboard is the record.
+    // Alerts are best-effort; the dashboard is the record.
   }
 }

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { parseManagerEmails, resolveRole } from '@/lib/role-logic';
 
 // Employees may only use these (managers get everything).
-const EMPLOYEE_PAGES = ['/dashboard/schedule', '/dashboard/orders'];
+const EMPLOYEE_PAGES = ['/dashboard/schedule', '/dashboard/orders', '/dashboard/reservations'];
 function employeeApiAllowed(pathname: string, method: string): boolean {
   if (pathname.startsWith('/api/shifts') && method === 'GET') return true;
   if (pathname.startsWith('/api/time-off') && (method === 'GET' || method === 'POST')) return true;
@@ -11,6 +11,9 @@ function employeeApiAllowed(pathname: string, method: string): boolean {
   // Deliveries: see orders and check in what arrived — nothing else on orders
   if (pathname === '/api/orders' && method === 'GET') return true;
   if (pathname === '/api/orders/receive' && method === 'POST') return true;
+  // Reservations: see, add and update bookings; only managers change the settings
+  if (pathname === '/api/reservations' && ['GET', 'POST', 'PUT'].includes(method)) return true;
+  if (pathname === '/api/reservations/settings' && method === 'GET') return true;
   return false;
 }
 
@@ -49,8 +52,12 @@ export async function updateSession(request: NextRequest) {
 
   const url = request.nextUrl.clone();
   const isDashboard = url.pathname.startsWith('/dashboard');
-  // The email-ingest webhook carries its own shared secret
-  const isProtectedApi = url.pathname.startsWith('/api') && !url.pathname.startsWith('/api/ingest-email');
+  // The email-ingest webhook carries its own shared secret; /api/public is the
+  // guest booking API used by chebararuba.com
+  const isProtectedApi =
+    url.pathname.startsWith('/api') &&
+    !url.pathname.startsWith('/api/ingest-email') &&
+    !url.pathname.startsWith('/api/public/');
 
   if (!user && isProtectedApi) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
