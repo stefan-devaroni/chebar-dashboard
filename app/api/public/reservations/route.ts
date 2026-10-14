@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { notifyOwner } from '@/lib/notify';
+import { RESTAURANT_EMAIL, sendEmail } from '@/lib/email';
+import { confirmationEmail } from '@/lib/reservation-emails';
 import {
   arubaNow,
   closedMessage,
@@ -20,7 +22,7 @@ import { clientIpHash, corsHeaders, loadSettings } from '@/lib/reservations-serv
 export const dynamic = 'force-dynamic';
 
 const UNAVAILABLE = {
-  error: 'Online booking is not available right now. Please call or WhatsApp us at +297 699 1696.',
+  error: `Online booking is not available right now. Please email us at ${RESTAURANT_EMAIL}.`,
   code: 'unavailable',
 };
 const SLOT_FULL = { error: 'Sorry, that time just filled up. Please pick another time.', code: 'slot_full' };
@@ -49,6 +51,7 @@ export async function GET(request: NextRequest) {
       today: now.date,
       maxParty: settings.max_party_online,
       maxDaysAhead: settings.max_days_ahead,
+      emails: Boolean(process.env.RESEND_API_KEY), // confirmation emails switched on
       closedDates: settings.closed_dates.filter((d) => d >= now.date),
     });
   }
@@ -88,7 +91,7 @@ export async function POST(request: NextRequest) {
   if (b.party > settings.max_party_online) {
     return json(
       request,
-      { error: `For groups over ${settings.max_party_online}, please message us on WhatsApp.`, code: 'party_too_big' },
+      { error: `For groups over ${settings.max_party_online}, please email us at ${RESTAURANT_EMAIL}.`, code: 'party_too_big' },
       400
     );
   }
@@ -103,7 +106,7 @@ export async function POST(request: NextRequest) {
     if ((count ?? 0) >= MAX_BOOKINGS_PER_HOUR) {
       return json(
         request,
-        { error: 'Too many bookings from this device. Please call or WhatsApp us at +297 699 1696.', code: 'rate_limited' },
+        { error: `Too many bookings from this device. Please email us at ${RESTAURANT_EMAIL}.`, code: 'rate_limited' },
         429
       );
     }
@@ -148,19 +151,29 @@ export async function POST(request: NextRequest) {
   const r = (Array.isArray(data) ? data[0] : data) as Reservation & { manage_token: string };
   if (!r?.manage_token) return json(request, UNAVAILABLE, 503);
 
-  // A retried submit gets the original booking back — alert only once
-  if (r.manage_token === token) {
-    await notifyOwner({
+  // A retried submit gets the original booking back — alert and email only once
+  const isNew = r.manage_token === token;
+  let emailed = Boolean(process.env.RESEND_API_KEY && r.email);
+  if (isNew) {
+    const sent = r.email
+      ? sendEmail({
+          to: r.email,
+          ...confirmationEmail({ date: r.date, time: r.time, party: r.party_size, name: r.name, token: r.manage_token }),
+        })
+      : Promise.resolve(false);
+    const alert = notifyOwner({
       title: `New booking: ${r.party_size} ${r.party_size === 1 ? 'guest' : 'guests'}`,
       message: `${formatDate(r.date)} at ${formatTime(r.time)} · ${r.name}`,
       url: `https://dashboard.chebararuba.com/dashboard/reservations?date=${r.date}`,
       tags: ['fork_and_knife'],
       priority: 3,
     });
+    [emailed] = await Promise.all([sent, alert]);
   }
 
   return json(request, {
     ok: true,
     booking: { date: r.date, time: r.time, party: r.party_size, name: r.name, token: r.manage_token },
+    emailed,
   });
 }

@@ -155,7 +155,7 @@ export function dayAvailability(
 export function closedMessage(reason: ClosedReason | undefined, settings: ReservationSettings): string {
   switch (reason) {
     case 'paused':
-      return 'Online booking is paused right now. Walk-ins are welcome, or give us a call.';
+      return 'Online booking is paused right now. Walk-ins are welcome.';
     case 'past':
       return 'That day has already passed.';
     case 'too_far':
@@ -197,8 +197,8 @@ export interface GuestBooking {
   time: string;
   party: number;
   name: string;
-  phone: string;
-  email: string | null;
+  phone: string | null;
+  email: string; // confirmations go by email
   notes: string | null;
   clientRef: string | null;
 }
@@ -215,18 +215,17 @@ export function parseGuestBooking(body: any): { ok: true; value: GuestBooking } 
   if (!isTime(body?.time)) return { ok: false, error: 'Please pick a time.' };
   if (!Number.isInteger(party) || party < 1) return { ok: false, error: 'How many guests?' };
   if (!name) return { ok: false, error: 'Please enter your name.' };
-  if (!/^\+?[\d\s().-]+$/.test(phone) || phone.replace(/\D/g, '').length < 7) {
-    return { ok: false, error: 'Please enter a phone number we can reach you on.' };
-  }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { ok: false, error: "That email address doesn't look right." };
+  if (!email) return { ok: false, error: 'Please enter your email so we can send your confirmation.' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "That email address doesn't look right." };
+  if (phone && (!/^\+?[\d\s().-]+$/.test(phone) || phone.replace(/\D/g, '').length < 7)) {
+    return { ok: false, error: "That phone number doesn't look right." };
   }
   const clientRef =
     typeof body?.clientRef === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(body.clientRef) ? body.clientRef : null;
 
   return {
     ok: true,
-    value: { date: body.date, time: body.time, party, name, phone, email: email || null, notes: notes || null, clientRef },
+    value: { date: body.date, time: body.time, party, name, phone: phone || null, email, notes: notes || null, clientRef },
   };
 }
 

@@ -44,6 +44,7 @@ interface Props {
   initialSettings: ReservationSettings;
   role: Role;
   setupNeeded: boolean;
+  emailsEnabled: boolean; // guest emails switched on (Resend key set)
 }
 
 const PARTS = [
@@ -78,6 +79,7 @@ export function ReservationsView({
   initialSettings,
   role,
   setupNeeded,
+  emailsEnabled,
 }: Props) {
   const [date, setDate] = useState(initialDate);
   const [rows, setRows] = useState<Reservation[]>(initialReservations);
@@ -135,18 +137,20 @@ export function ReservationsView({
     setTimeout(() => setToast(null), 2500);
   }
 
-  async function setStatus(r: Reservation, status: ReservationStatus) {
+  async function setStatus(r: Reservation, status: ReservationStatus, notify = false) {
     const res = await fetch('/api/reservations', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: r.id, status }),
+      body: JSON.stringify({ id: r.id, status, notify }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       alert(data.error || 'Could not save. Try again.');
       return;
     }
-    setRows((prev) => prev.map((x) => (x.id === r.id ? data : x)));
+    const { emailed, ...row } = data;
+    setRows((prev) => prev.map((x) => (x.id === r.id ? row : x)));
+    if (emailed) flash('Guest emailed');
   }
 
   async function saveSettings(patch: Partial<ReservationSettings>) {
@@ -386,9 +390,10 @@ export function ReservationsView({
         <DetailsSheet
           r={opened}
           today={today}
+          canEmail={emailsEnabled && !!opened.email}
           onClose={() => setOpenId(null)}
-          onStatus={async (status) => {
-            await setStatus(opened, status);
+          onStatus={async (status, notify) => {
+            await setStatus(opened, status, notify);
             if (status === 'cancelled' || status === 'seated' || status === 'no_show') setOpenId(null);
           }}
           onEdit={() => {
@@ -405,12 +410,13 @@ export function ReservationsView({
           settings={settings}
           rows={rows}
           range={range}
+          emailsEnabled={emailsEnabled}
           onClose={() => setForm(null)}
-          onSaved={(saved) => {
+          onSaved={(saved, emailed) => {
             setRows((prev) => (prev.some((x) => x.id === saved.id) ? prev.map((x) => (x.id === saved.id ? saved : x)) : [...prev, saved]));
             setForm(null);
             if (saved.date !== date) goTo(saved.date);
-            flash(form.editing ? 'Booking updated' : 'Booking added');
+            flash((form.editing ? 'Booking updated' : 'Booking added') + (emailed ? ' · guest emailed' : ''));
           }}
         />
       )}
@@ -502,16 +508,20 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 function DetailsSheet({
   r,
   today,
+  canEmail,
   onClose,
   onStatus,
   onEdit,
 }: {
   r: Reservation;
   today: string;
+  canEmail: boolean;
   onClose: () => void;
-  onStatus: (status: ReservationStatus) => void;
+  onStatus: (status: ReservationStatus, notify?: boolean) => void;
   onEdit: () => void;
 }) {
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [notify, setNotify] = useState(true);
   const pill = STATUS_PILL[r.status];
   const happened = r.date <= today;
   const booked = new Date(r.created_at).toLocaleString('en-US', {
@@ -534,16 +544,16 @@ function DetailsSheet({
       </div>
 
       <div className="space-y-2 mb-4">
-        {r.phone && (
-          <a href={`tel:${r.phone.replace(/[^\d+]/g, '')}`} className="flex items-center gap-3 bg-white border border-neutral-200 rounded-xl px-4 py-3 text-[15px]">
-            <Phone size={16} className="text-neutral-400 shrink-0" />
-            {r.phone}
-          </a>
-        )}
         {r.email && (
           <a href={`mailto:${r.email}`} className="flex items-center gap-3 bg-white border border-neutral-200 rounded-xl px-4 py-3 text-[15px] min-w-0">
             <Mail size={16} className="text-neutral-400 shrink-0" />
             <span className="truncate">{r.email}</span>
+          </a>
+        )}
+        {r.phone && (
+          <a href={`tel:${r.phone.replace(/[^\d+]/g, '')}`} className="flex items-center gap-3 bg-white border border-neutral-200 rounded-xl px-4 py-3 text-[15px]">
+            <Phone size={16} className="text-neutral-400 shrink-0" />
+            {r.phone}
           </a>
         )}
         {r.notes && (
@@ -574,25 +584,43 @@ function DetailsSheet({
           </button>
         )}
         {r.status === 'cancelled' && (
-          <button onClick={() => onStatus('confirmed')} className={cn(actionClass, 'bg-white border border-neutral-200 text-neutral-700')}>
-            Restore booking
+          <button onClick={() => onStatus('confirmed', canEmail)} className={cn(actionClass, 'bg-white border border-neutral-200 text-neutral-700')}>
+            Restore booking{canEmail ? ' and email guest' : ''}
           </button>
         )}
         <button onClick={onEdit} className={cn(actionClass, 'bg-ink text-cream')}>
           Edit details
         </button>
-        {r.status !== 'cancelled' && (
-          <button
-            onClick={() => {
-              if (confirm(`Cancel the booking for ${r.name}?`)) onStatus('cancelled');
-            }}
-            className="w-full py-3 text-sm text-red-600"
-          >
+        {r.status !== 'cancelled' && !confirmCancel && (
+          <button onClick={() => setConfirmCancel(true)} className="w-full py-3 text-sm text-red-600">
             Cancel booking
           </button>
         )}
+        {r.status !== 'cancelled' && confirmCancel && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+            <p className="text-[15px] font-medium text-red-900">Cancel the booking for {r.name}?</p>
+            {canEmail && <EmailCheckbox checked={notify} onChange={setNotify} label="Email the guest that it's cancelled" />}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setConfirmCancel(false)} className={cn(actionClass, 'bg-white border border-neutral-200 text-neutral-700')}>
+                Keep it
+              </button>
+              <button onClick={() => onStatus('cancelled', canEmail && notify)} className={cn(actionClass, 'bg-red-600 text-white')}>
+                Yes, cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </Sheet>
+  );
+}
+
+function EmailCheckbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center gap-3 text-[15px] cursor-pointer select-none">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-5 h-5 accent-[#1a1a1a] shrink-0" />
+      {label}
+    </label>
   );
 }
 
@@ -626,6 +654,7 @@ function BookingForm({
   settings,
   rows,
   range,
+  emailsEnabled,
   onClose,
   onSaved,
 }: {
@@ -634,8 +663,9 @@ function BookingForm({
   settings: ReservationSettings;
   rows: Reservation[];
   range: { from: string; to: string };
+  emailsEnabled: boolean;
   onClose: () => void;
-  onSaved: (r: Reservation) => void;
+  onSaved: (r: Reservation, emailed: boolean) => void;
 }) {
   const [date, setDate] = useState(editing?.date ?? defaultDate);
   const [time, setTime] = useState(editing?.time ?? '');
@@ -644,8 +674,14 @@ function BookingForm({
   const [phone, setPhone] = useState(editing?.phone ?? '');
   const [email, setEmail] = useState(editing?.email ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
+  const [notify, setNotify] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Offer to email the guest for a new booking, or when the day/time/guests change
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const moved = !editing || date !== editing.date || time !== editing.time || party !== editing.party_size;
+  const offerEmail = emailsEnabled && emailValid && moved && editing?.status !== 'cancelled';
 
   const times = useMemo(() => {
     const base = slotTimes('07:00', '22:30');
@@ -666,7 +702,7 @@ function BookingForm({
     if (!time) return setError('Pick a time.');
     if (!name.trim()) return setError('Enter a name.');
     setSaving(true);
-    const payload = { date, time, party_size: party, name, phone, email, notes };
+    const payload = { date, time, party_size: party, name, phone, email, notes, notify: offerEmail && notify };
     try {
       const res = await fetch('/api/reservations', {
         method: editing ? 'PUT' : 'POST',
@@ -679,7 +715,8 @@ function BookingForm({
         setSaving(false);
         return;
       }
-      onSaved(data);
+      const { emailed, ...row } = data;
+      onSaved(row, Boolean(emailed));
     } catch {
       setError('Network error. Try again.');
       setSaving(false);
@@ -723,12 +760,12 @@ function BookingForm({
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maria Lopez" className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>Phone (optional)</label>
-          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +1 555 123 4567" className={inputClass} />
+          <label className={labelClass}>Email (optional)</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. maria@gmail.com" className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>Email (optional)</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          <label className={labelClass}>Phone (optional)</label>
+          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +1 555 123 4567" className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>Notes (optional)</label>
@@ -741,7 +778,15 @@ function BookingForm({
           />
         </div>
 
-        {error && <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-800">{error}</div>}
+        {offerEmail && (
+          <EmailCheckbox
+            checked={notify}
+            onChange={setNotify}
+            label={editing ? 'Email the guest the new details' : 'Email the guest a confirmation'}
+          />
+        )}
+
+        {error &&<div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-800">{error}</div>}
 
         <button onClick={save} disabled={saving} className="w-full bg-ink text-cream py-3.5 rounded-xl text-base font-medium disabled:opacity-50">
           {saving ? 'Saving…' : editing ? 'Save changes' : 'Add booking'}
@@ -807,7 +852,7 @@ function SettingsSheet({
         <div>
           <label className={labelClass}>Biggest group that can book online</label>
           <Stepper value={s.max_party_online} min={1} max={50} onChange={(n) => set({ max_party_online: n })} label="group size" />
-          <p className="text-[11px] text-neutral-500 mt-1.5">Bigger groups are asked to WhatsApp you.</p>
+          <p className="text-[11px] text-neutral-500 mt-1.5">Bigger groups are asked to email you.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

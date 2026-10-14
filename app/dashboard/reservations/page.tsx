@@ -37,6 +37,7 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
         initialSettings={normalizeSettings(settingsRow)}
         role={session?.role ?? 'employee'}
         setupNeeded={isMissingTable(error)}
+        emailsEnabled={Boolean(process.env.RESEND_API_KEY)}
       />
     </div>
   );

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { notifyOwner } from '@/lib/notify';
+import { RESTAURANT_EMAIL, sendEmail } from '@/lib/email';
+import { cancellationEmail } from '@/lib/reservation-emails';
 import { arubaNow, formatDate, formatTime, toMinutes } from '@/lib/reservations';
 import { corsHeaders } from '@/lib/reservations-server';
 
@@ -27,11 +29,11 @@ export async function POST(request: NextRequest) {
   const supabase = createClient();
   const { data: r, error } = await supabase
     .from('reservations')
-    .select('id, date, time, party_size, name, status')
+    .select('id, date, time, party_size, name, email, status')
     .eq('manage_token', token)
     .maybeSingle();
   if (error) {
-    return json(request, { error: 'Something went wrong. Please call or WhatsApp us at +297 699 1696.', code: 'unavailable' }, 503);
+    return json(request, { error: `Something went wrong. Please email us at ${RESTAURANT_EMAIL}.`, code: 'unavailable' }, 503);
   }
   if (!r) return json(request, { error: "We couldn't find this booking.", code: 'not_found' }, 404);
 
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
   const now = arubaNow();
   const passed = r.date < now.date || (r.date === now.date && toMinutes(r.time) <= now.minutes);
   if (r.status !== 'confirmed' || passed) {
-    return json(request, { error: "This booking can't be changed online anymore. Please call us.", code: 'locked' }, 409);
+    return json(request, { error: `This booking can't be changed online anymore. Please email us at ${RESTAURANT_EMAIL}.`, code: 'locked' }, 409);
   }
 
   const { error: updateError } = await supabase
@@ -50,15 +52,19 @@ export async function POST(request: NextRequest) {
     .update({ status: 'cancelled', updated_at: new Date().toISOString() })
     .eq('id', r.id);
   if (updateError) {
-    return json(request, { error: 'Something went wrong. Please call or WhatsApp us at +297 699 1696.', code: 'unavailable' }, 503);
+    return json(request, { error: `Something went wrong. Please email us at ${RESTAURANT_EMAIL}.`, code: 'unavailable' }, 503);
   }
 
-  await notifyOwner({
-    title: 'Booking cancelled',
-    message: `${r.party_size} ${r.party_size === 1 ? 'guest' : 'guests'} · ${formatDate(r.date)} at ${formatTime(r.time)} · ${r.name}`,
-    url: `https://dashboard.chebararuba.com/dashboard/reservations?date=${r.date}`,
-    tags: ['x'],
-    priority: 3,
-  });
+  const details = { date: r.date, time: r.time, party: r.party_size, name: r.name };
+  await Promise.all([
+    r.email ? sendEmail({ to: r.email, ...cancellationEmail(details) }) : Promise.resolve(false),
+    notifyOwner({
+      title: 'Booking cancelled',
+      message: `${r.party_size} ${r.party_size === 1 ? 'guest' : 'guests'} · ${formatDate(r.date)} at ${formatTime(r.time)} · ${r.name}`,
+      url: `https://dashboard.chebararuba.com/dashboard/reservations?date=${r.date}`,
+      tags: ['x'],
+      priority: 3,
+    }),
+  ]);
   return json(request, { ok: true, booking: { ...booking, status: 'cancelled' } });
 }
