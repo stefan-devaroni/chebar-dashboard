@@ -53,6 +53,7 @@ These are settled — don't relitigate unless Stefan brings them up.
 1. **June 1 simplification.** Menu and hours change on June 1. Operational clarity prioritized over revenue capture in the 3-5pm slot.
 2. **Cut from menu:** Marinara pizza (low volume, 13 sold/4mo), Americana pizza (chicken supply chain issue).
    - **UPDATE Jul 2026 (confirmed by Stefan): the Americana was NOT removed — it's still on the menu and selling.**
+   - **UPDATE Oct 2026: the locked Nights menu now has only 4 pizzas (Margherita, Pepperoni, Hawaiian, Prosciutto & Rucola). Americana, Marinara, Happy Island, Aruba Loves You, Garden Veggies, Mellow Mushroom are off the menu (website updated Oct 15).**
 3. **Repricing on June 1:**
    - Big Breakfast $14 → $16
    - French Toast & Fruit $11.50 → $13.50
@@ -64,11 +65,28 @@ These are settled — don't relitigate unless Stefan brings them up.
 5. **Locals 15% off** (May–Nov, low season only, show Aruba ID).
 6. **3-5pm close** — Stefan chose operational simplicity over the marginal contribution; productivity SOP for staff during closure (prep/cleaning/content).
    - **UPDATE Jul 2026 (confirmed by Stefan): did not happen — open continuously 7:30 AM–11 PM daily.**
+   - **Re-confirmed Oct 15 2026: still open all day, 7:30 AM–11 PM. An Oct 2026 handoff doc from the chat app says "Closed 3–5 PM daily" — that line is outdated; ignore it.**
 
 > **Reality check (Jul 2026):** of the June 1 plan, only the menu simplification (evening menu reduced to pizza; burgers/wings/etc. cut) actually shipped. The reprices, Americana removal, 3–5 close, and pizza combo did NOT happen. Verify against POS before citing any planned change as fact.
 7. **Dual brand identity** — Mornings + Nights as distinct campaigns, distinct social aesthetics, distinct positioning. Mornings competes on differentiation (no direct brunch competitor); Nights competes on price/value vs neighboring 4.9★ venues.
 
 ---
+
+## Current menus, voice & decisions (Oct 2026 handoff)
+
+From a handoff doc Stefan wrote in the chat app (Oct 2026). Co-owner: Juan. Guest-facing email stays **chebararuba@gmail.com** (Stefan's choice, Oct 15) even though the handoff lists info@chebararuba.com.
+
+**Brand voice (critical for website, emails, ads):** honest, warm, unhurried, worth the money. Describe things as they are — "Scrambled eggs, bacon, skillet potatoes, toast, and a side of fresh fruit." Never use "amazing", "indulgent", "nutritious", "superfood", "delicious" or other hype words.
+
+**Nights menu (locked, 6–10:30 PM):** Margherita $20 · Pepperoni $18 · Hawaiian $19 · Prosciutto & Rucola $24 · Empanada Sampler $12 (chicken, beef, cheese) · The Full Spread for Two $40 (3 empanadas, 1 pizza, 2 local beers) · Pizza & Beer for Two $42 (2 pizzas, 2 local beers) — combos exclude Prosciutto & Rucola, +$4 to upgrade · Nutella Pizza $12.
+
+**Drinks (locked):** signature cocktails $15–17 (Espresso Martini, Honey Deuce, Coco Mojito, Pineapple Mule, Aperol Spritz, Fresca Paloma) · Che Bar Classics $12 (Mai Tai, The Hulk, Aruba Ariba, Long Island, Hurricane), **2-for-1 at happy hour 5–7 PM daily** · frozen $14 · local beer $6 (Balashi, Chill, Magic Mango) · Amstel Bright/Heineken $6.50, Miller Lite $7.50, Corona $8 (replaced Coronita), Modelo $11 · Trapiche wine $9. Website still shows $5 local beers / $6 wines at happy hour — unconfirmed.
+
+**Mornings menu:** website matches the handoff (pancakes $14.50–15.75, Big Breakfast $14, etc.). A breakfast research study (`~/breakfast-research/`, Oct 6) recommends a new 18-item menu with new prices — NOT confirmed by Stefan; don't publish those prices until he locks them. Fresh OJ (large sells ~7.8/day) is not on the menu yet.
+
+**Decisions (locked):** live music cut to **Fridays + Saturdays only** (7–9 PM), saved $2K/mo moved to marketing. Marketing agency RFP going to MRZ Media, Aruwave, Strena, EMP, The Warm People (target ~$2K/mo). Agencies get Meta **Standard access only, never Full Control**. POS: 2 Revel iPads (inside counter + outside bar), each with its own drawer; per-iPad Z-read at close. Cash handover: 3-person witness, tips stay in drawer, 1% of shift cash sales = variance tolerance, cash to the upstairs drop safe.
+
+**Pending (from the handoff):** hotel concierge one-pager; Ops Manual ch. 4 (evening close) + ch. 5 (kitchen opening); order 5,000 QR review cards; photo shoot; Lady B TripAdvisor reply; POS cleanup (dead items, typed one-offs, Hot Chocolate 0 sales, "2 eggs" as modifier only).
 
 ## Brand & design system
 
