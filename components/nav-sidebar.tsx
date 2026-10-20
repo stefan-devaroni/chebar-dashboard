@@ -1,10 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { Sun, CalendarCheck, CalendarDays, ListChecks, ShoppingCart, Truck, Users, LogOut } from 'lucide-react';
+import { Sun, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, ShoppingCart, Truck, Users, LogOut } from 'lucide-react';
 
 type Role = 'manager' | 'employee';
 export type NavBadges = { missing: number; pending: number };
@@ -15,6 +16,7 @@ type NavItem = {
   shortLabel?: string; // phone tab bar, where space is tight
   icon: typeof Sun;
   roles: Role[];
+  phoneMore?: Role[]; // on phones, these roles find this item under "More"
   alsoActiveOn?: string[];
   badge?: keyof NavBadges;
 };
@@ -22,11 +24,12 @@ type NavItem = {
 const allNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Today', icon: Sun, roles: ['manager'] },
   { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, roles: ['manager', 'employee'] },
+  { href: '/dashboard/checklists', label: 'Checklists', icon: ClipboardCheck, roles: ['manager', 'employee'], phoneMore: ['manager'] },
   { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, roles: ['manager'], alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['manager', 'employee'] },
   { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], badge: 'pending' },
-  { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['manager'] },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'] },
+  { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['manager'], phoneMore: ['manager'] },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'], phoneMore: ['manager'] },
 ];
 
 function Badge({ count, kind, className }: { count: number; kind: keyof NavBadges; className?: string }) {
@@ -45,12 +48,17 @@ function Badge({ count, kind, className }: { count: number; kind: keyof NavBadge
 export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0 } }: { role?: Role; badges?: NavBadges }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [moreOpen, setMoreOpen] = useState(false);
   const navItems = allNavItems.filter((i) => i.roles.includes(role));
+  const phoneTabs = navItems.filter((i) => !i.phoneMore?.includes(role));
+  const phoneMore = navItems.filter((i) => i.phoneMore?.includes(role));
 
   const isActive = (item: NavItem) =>
     pathname === item.href ||
     (item.href !== '/dashboard' && pathname.startsWith(item.href)) ||
     (item.alsoActiveOn ?? []).some((p) => pathname.startsWith(p));
+  const moreActive = phoneMore.some(isActive);
+  const moreBadge = phoneMore.reduce((sum, i) => sum + (i.badge ? badges[i.badge] : 0), 0);
 
   async function signOut() {
     const supabase = createClient();
@@ -58,6 +66,9 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
     router.push('/login');
     router.refresh();
   }
+
+  const tabClass = (active: boolean) =>
+    cn('relative flex flex-col items-center justify-center gap-1 h-16 text-[11px] transition', active ? 'text-cream' : 'text-neutral-500');
 
   return (
     <>
@@ -107,21 +118,43 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
         </button>
       </header>
 
+      {/* Phone: "More" sheet for tabs that don't fit the bar */}
+      {moreOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-ink/50" onClick={() => setMoreOpen(false)}>
+          <div
+            className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] bg-ink border-t border-neutral-800 rounded-t-2xl px-3 pt-3 pb-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {phoneMore.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMoreOpen(false)}
+                  className={cn(
+                    'flex items-center gap-4 px-4 h-14 rounded-xl text-[15px]',
+                    isActive(item) ? 'bg-neutral-800 text-cream' : 'text-neutral-300 active:bg-neutral-900'
+                  )}
+                >
+                  <Icon size={20} strokeWidth={1.5} />
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge && <Badge count={badges[item.badge]} kind={item.badge} />}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Phone: tab bar */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-ink border-t border-neutral-800 pb-[env(safe-area-inset-bottom)]">
-        <div className="grid" style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}>
-          {navItems.map((item) => {
+        <div className="grid" style={{ gridTemplateColumns: `repeat(${phoneTabs.length + (phoneMore.length ? 1 : 0)}, minmax(0, 1fr))` }}>
+          {phoneTabs.map((item) => {
             const Icon = item.icon;
-            const active = isActive(item);
+            const active = isActive(item) && !moreOpen;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'relative flex flex-col items-center justify-center gap-1 h-16 text-[11px] transition',
-                  active ? 'text-cream' : 'text-neutral-500'
-                )}
-              >
+              <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={tabClass(active)}>
                 {active && <span className="absolute top-0 inset-x-5 h-0.5 rounded-full bg-gold" />}
                 <span className="relative">
                   <Icon size={22} strokeWidth={active ? 2 : 1.5} />
@@ -131,6 +164,16 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
               </Link>
             );
           })}
+          {phoneMore.length > 0 && (
+            <button onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen} className={tabClass(moreActive || moreOpen)}>
+              {(moreActive || moreOpen) && <span className="absolute top-0 inset-x-5 h-0.5 rounded-full bg-gold" />}
+              <span className="relative">
+                <Ellipsis size={22} strokeWidth={moreActive || moreOpen ? 2 : 1.5} />
+                {moreBadge > 0 && <Badge count={moreBadge} kind="missing" className="absolute -top-1.5 -right-3" />}
+              </span>
+              More
+            </button>
+          )}
         </div>
       </nav>
     </>

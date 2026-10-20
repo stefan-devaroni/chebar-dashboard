@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { AlertTriangle, ChevronRight, Moon, Sun, Users } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Moon, Sun, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { openMissing, stageCounts, type PurchaseOrder } from '@/lib/purchasing';
 import { arubaNow, formatTime, isActive, toMinutes, type Reservation } from '@/lib/reservations';
+import { businessDate, formatClock, isLate, runsOn, type Checklist } from '@/lib/checklists';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,16 @@ export default async function TodayPage() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Aruba' }));
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  const [{ data: orders }, { data: shifts }, { data: tasks, count: openTasks }, { data: bookings, error: bookingsError }] = await Promise.all([
+  const checklistDay = businessDate();
+  const [
+    { data: orders },
+    { data: shifts },
+    { data: tasks, count: openTasks },
+    { data: bookings, error: bookingsError },
+    { data: lists, error: listsError },
+    { data: listItems },
+    { data: listChecks },
+  ] = await Promise.all([
     supabase.from('purchase_orders').select('*'),
     supabase
       .from('shifts')
@@ -58,6 +68,9 @@ export default async function TodayPage() {
       .select('id, time, party_size, name, status')
       .eq('date', today)
       .order('time'),
+    supabase.from('checklists').select('id, name, department, days, due_time, sort, active').order('sort'),
+    supabase.from('checklist_items').select('id, checklist_id, active'),
+    supabase.from('checklist_checks').select('item_id, checked_at').eq('date', checklistDay),
   ]);
 
   const allOrders = (orders ?? []) as PurchaseOrder[];
@@ -76,6 +89,17 @@ export default async function TodayPage() {
   const upcoming = todayBookings
     .filter((r) => r.status === 'confirmed' && toMinutes(r.time) >= nowMinutes - 30)
     .slice(0, 3);
+
+  // Checklists card (hidden until supabase/checklists.sql has been run)
+  const checkedAt = new Map((listChecks ?? []).map((c) => [c.item_id as string, c.checked_at as string]));
+  const listStatus = ((lists ?? []) as Checklist[])
+    .filter((l) => runsOn(l, checklistDay))
+    .map((l) => {
+      const ids = (listItems ?? []).filter((i) => i.checklist_id === l.id && (i.active || checkedAt.has(i.id))).map((i) => i.id as string);
+      const done = ids.length > 0 && ids.every((id) => checkedAt.has(id));
+      const finished = done ? ids.map((id) => checkedAt.get(id)!).sort().pop() : undefined;
+      return { list: l, total: ids.length, checked: ids.filter((id) => checkedAt.has(id)).length, done, finished, late: isLate(l, checklistDay, done) };
+    });
 
   const stats = [
     { label: 'To send', value: toSend, tone: 'text-amber-700' },
@@ -135,6 +159,29 @@ export default async function TodayPage() {
                 )}
               </>
             )}
+          </Card>
+        )}
+
+        {!listsError && listStatus.length > 0 && (
+          <Card title="Checklists" href="/dashboard/checklists">
+            <ul className="space-y-1.5">
+              {listStatus.map((s) => (
+                <li key={s.list.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{s.list.name}</span>
+                  {s.done ? (
+                    <span className="flex items-center gap-1 text-emerald-700 shrink-0">
+                      <Check size={14} strokeWidth={2.5} />
+                      {s.finished && formatClock(s.finished)}
+                    </span>
+                  ) : (
+                    <span className={cn('tabular-nums shrink-0', s.late ? 'text-amber-700 font-medium' : 'text-neutral-500')}>
+                      {s.late && 'Late · '}
+                      {s.checked}/{s.total}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
           </Card>
         )}
 
