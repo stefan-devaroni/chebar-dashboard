@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { parseManagerEmails, resolveRole } from '@/lib/role-logic';
 
 // Employees may only use these (managers get everything).
-const EMPLOYEE_PAGES = ['/dashboard/schedule', '/dashboard/orders', '/dashboard/reservations', '/dashboard/checklists'];
+const EMPLOYEE_PAGES = ['/dashboard/schedule', '/dashboard/orders', '/dashboard/reservations', '/dashboard/checklists', '/dashboard/menu', '/dashboard/handbook'];
 function employeeApiAllowed(pathname: string, method: string): boolean {
   if (pathname.startsWith('/api/shifts') && method === 'GET') return true;
   if (pathname.startsWith('/api/time-off') && (method === 'GET' || method === 'POST')) return true;
@@ -17,6 +17,8 @@ function employeeApiAllowed(pathname: string, method: string): boolean {
   // Checklists: read today's lists and tick items; only managers edit the lists
   if (pathname === '/api/checklists' && method === 'GET') return true;
   if (pathname === '/api/checklists/check' && method === 'POST') return true;
+  // Menu & recipes and the handbook: read only
+  if ((pathname === '/api/menu' || pathname === '/api/handbook') && method === 'GET') return true;
   return false;
 }
 

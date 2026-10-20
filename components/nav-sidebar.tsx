@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { Sun, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, ShoppingCart, Truck, Users, LogOut } from 'lucide-react';
+import { Sun, BookOpen, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, ShoppingCart, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
 
 type Role = 'manager' | 'employee';
 export type NavBadges = { missing: number; pending: number };
@@ -25,10 +25,12 @@ const allNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Today', icon: Sun, roles: ['manager'] },
   { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, roles: ['manager', 'employee'] },
   { href: '/dashboard/checklists', label: 'Checklists', icon: ClipboardCheck, roles: ['manager', 'employee'], phoneMore: ['manager'] },
+  { href: '/dashboard/menu', label: 'Menu & Recipes', shortLabel: 'Menu', icon: UtensilsCrossed, roles: ['manager', 'employee'], phoneMore: ['manager'] },
   { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, roles: ['manager'], alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['manager', 'employee'] },
-  { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], badge: 'pending' },
+  { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], phoneMore: ['employee'], badge: 'pending' },
   { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['manager'], phoneMore: ['manager'] },
+  { href: '/dashboard/handbook', label: 'Handbook', icon: BookOpen, roles: ['manager', 'employee'], phoneMore: ['manager', 'employee'] },
   { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'], phoneMore: ['manager'] },
 ];
 
