@@ -102,18 +102,19 @@ begin
     ('Electric Lemonade', 'Frozen Drinks', 'drinks', 'bar', 14, 'Vodka, lime juice, and blue curacao.', null, '[{"name":"Vodka","qty":null,"unit":""},{"name":"Lime juice","qty":null,"unit":""},{"name":"Blue curaçao","qty":null,"unit":""}]'::jsonb, null, 60),
     ('Coco Colada', 'Frozen Drinks', 'drinks', 'bar', 14, 'Rum, coconut, and piña colada.', null, '[{"name":"Rum","qty":null,"unit":""},{"name":"Coconut","qty":null,"unit":""},{"name":"Piña colada mix","qty":null,"unit":""}]'::jsonb, null, 61),
     ('Merlot', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Merlot","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 62),
-    ('Cabernet-Malbec', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Cabernet-Malbec","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 63),
-    ('Chardonnay', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Chardonnay","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 64),
-    ('Pinot Grigio', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Pinot Grigio","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 65),
-    ('Sauvignon Blanc', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Sauvignon Blanc","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 66),
-    ('Balashi', 'Beers', 'drinks', 'bar', 6, null, null, '[{"name":"Balashi","qty":1,"unit":"bottle"}]'::jsonb, 'Happy hour 5–7 PM: $5.', 67),
-    ('Chill', 'Beers', 'drinks', 'bar', 6, null, null, '[{"name":"Chill","qty":1,"unit":"bottle"}]'::jsonb, 'Happy hour 5–7 PM: $5.', 68),
-    ('Magic Mango', 'Beers', 'drinks', 'bar', 6, null, null, '[{"name":"Magic Mango","qty":1,"unit":"bottle"}]'::jsonb, 'Happy hour 5–7 PM: $5.', 69),
-    ('Amstel Bright', 'Beers', 'drinks', 'bar', 6.5, null, null, '[{"name":"Amstel Bright","qty":1,"unit":"bottle"}]'::jsonb, null, 70),
-    ('Heineken', 'Beers', 'drinks', 'bar', 6.5, null, null, '[{"name":"Heineken","qty":1,"unit":"bottle"}]'::jsonb, null, 71),
-    ('Miller Lite', 'Beers', 'drinks', 'bar', 7.5, null, null, '[{"name":"Miller Lite","qty":1,"unit":"bottle"}]'::jsonb, null, 72),
-    ('Coors Light', 'Beers', 'drinks', 'bar', 8.5, null, null, '[{"name":"Coors Light","qty":1,"unit":"bottle"}]'::jsonb, null, 73),
-    ('Coronita', 'Beers', 'drinks', 'bar', 6.25, null, null, '[{"name":"Coronita","qty":1,"unit":"bottle"}]'::jsonb, null, 74);
+    ('Cabernet Sauvignon', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Cabernet Sauvignon","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 63),
+    ('Malbec', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Malbec","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 64),
+    ('Chardonnay', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Chardonnay","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 65),
+    ('Pinot Grigio', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Pinot Grigio","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 66),
+    ('Sauvignon Blanc', 'Wines', 'drinks', 'bar', 9, null, null, '[{"name":"Trapiche Sauvignon Blanc","qty":1,"unit":"glass"}]'::jsonb, 'Trapiche (Mendoza). Happy hour 5–7 PM: $6.', 67),
+    ('Balashi', 'Beers', 'drinks', 'bar', 6, null, null, '[{"name":"Balashi","qty":1,"unit":"bottle"}]'::jsonb, 'Happy hour 5–7 PM: $5.', 68),
+    ('Chill', 'Beers', 'drinks', 'bar', 6, null, null, '[{"name":"Chill","qty":1,"unit":"bottle"}]'::jsonb, 'Happy hour 5–7 PM: $5.', 69),
+    ('Magic Mango', 'Beers', 'drinks', 'bar', 6, null, null, '[{"name":"Magic Mango","qty":1,"unit":"bottle"}]'::jsonb, 'Happy hour 5–7 PM: $5.', 70),
+    ('Amstel Bright', 'Beers', 'drinks', 'bar', 6.5, null, null, '[{"name":"Amstel Bright","qty":1,"unit":"bottle"}]'::jsonb, null, 71),
+    ('Heineken', 'Beers', 'drinks', 'bar', 6.5, null, null, '[{"name":"Heineken","qty":1,"unit":"bottle"}]'::jsonb, null, 72),
+    ('Miller Lite', 'Beers', 'drinks', 'bar', 7.5, null, null, '[{"name":"Miller Lite","qty":1,"unit":"bottle"}]'::jsonb, null, 73),
+    ('Coors Light', 'Beers', 'drinks', 'bar', 8.5, null, null, '[{"name":"Coors Light","qty":1,"unit":"bottle"}]'::jsonb, null, 74),
+    ('Coronita', 'Beers', 'drinks', 'bar', 6.25, null, null, '[{"name":"Coronita","qty":1,"unit":"bottle"}]'::jsonb, null, 75);
 end $$;
 
 notify pgrst, 'reload schema';
