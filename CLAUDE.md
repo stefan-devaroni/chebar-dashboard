@@ -208,6 +208,7 @@ npm run dev      # local check at http://localhost:3000
 For database changes:
 
 - Always write a migration SQL file in `supabase/` rather than editing the schema in the Supabase web console alone
+- Since Oct 21 2026 the Supabase connector is connected in Claude: apply the migration file with `apply_migration` on project `ppxjjgzlvztwkzfaaebm` and check it with `execute_sql`. Don't send Stefan SQL to paste. Deleting data still needs his OK.
 - Test the SQL on a fresh Supabase project before applying to production
 
 For deploys:
