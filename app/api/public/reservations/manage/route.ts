@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { notifyOwner } from '@/lib/notify';
+import { addNotification } from '@/lib/notifications';
 import { RESTAURANT_EMAIL, sendEmail } from '@/lib/email';
 import { cancellationEmail } from '@/lib/reservation-emails';
 import { arubaNow, formatDate, formatTime, toMinutes } from '@/lib/reservations';
@@ -64,6 +65,12 @@ export async function POST(request: NextRequest) {
       url: `https://dashboard.chebararuba.com/dashboard/reservations?date=${r.date}`,
       tags: ['x'],
       priority: 3,
+    }),
+    addNotification(supabase, {
+      kind: 'reservation',
+      title: 'Booking cancelled',
+      body: `${r.party_size} ${r.party_size === 1 ? 'guest' : 'guests'} · ${formatDate(r.date)} at ${formatTime(r.time)} · ${r.name}`,
+      link: `/dashboard/reservations?date=${r.date}`,
     }),
   ]);
   return json(request, { ok: true, booking: { ...booking, status: 'cancelled' } });

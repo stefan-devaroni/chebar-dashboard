@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
-import { Sun, BookOpen, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, ShoppingCart, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
+import { NotificationBell } from '@/components/notification-bell';
+import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, ShoppingCart, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
 
 type Role = 'manager' | 'employee';
-export type NavBadges = { missing: number; pending: number };
+export type NavBadges = { missing: number; pending: number; applicants: number };
 
 type NavItem = {
   href: string;
@@ -30,6 +31,7 @@ const allNavItems: NavItem[] = [
   { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['manager', 'employee'] },
   { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], phoneMore: ['employee'], badge: 'pending' },
   { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['manager'], phoneMore: ['manager'] },
+  { href: '/dashboard/applicants', label: 'Applicants', icon: Briefcase, roles: ['manager'], phoneMore: ['manager'], badge: 'applicants' },
   { href: '/dashboard/handbook', label: 'Handbook', icon: BookOpen, roles: ['manager', 'employee'], phoneMore: ['manager', 'employee'] },
   { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'], phoneMore: ['manager'] },
 ];
@@ -47,7 +49,7 @@ function Badge({ count, kind, className }: { count: number; kind: keyof NavBadge
   );
 }
 
-export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0 } }: { role?: Role; badges?: NavBadges }) {
+export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0, applicants: 0 } }: { role?: Role; badges?: NavBadges }) {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -76,9 +78,12 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
     <>
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex bg-ink text-cream flex-col h-screen sticky top-0 w-60 shrink-0">
-        <div className="px-6 py-8">
-          <Link href={navItems[0]?.href ?? '/dashboard'} className="font-display text-2xl block">Che Bar</Link>
-          <p className="text-[10px] uppercase tracking-widest text-neutral-400 mt-1">Dashboard</p>
+        <div className="pl-6 pr-3 py-8 flex items-start justify-between gap-2">
+          <div>
+            <Link href={navItems[0]?.href ?? '/dashboard'} className="font-display text-2xl block">Che Bar</Link>
+            <p className="text-[10px] uppercase tracking-widest text-neutral-400 mt-1">Dashboard</p>
+          </div>
+          {role === 'manager' && <NotificationBell placement="sidebar" />}
         </div>
         <nav className="flex-1 px-3 overflow-y-auto">
           {navItems.map((item) => {
@@ -114,10 +119,13 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
       {/* Phone: top bar */}
       <header className="lg:hidden fixed top-0 inset-x-0 z-40 bg-ink text-cream h-14 flex items-center justify-between px-4">
         <span className="font-display text-xl">Che Bar</span>
-        <button onClick={signOut} className="flex items-center gap-1.5 text-xs text-neutral-400 py-2 pl-3">
-          <LogOut size={15} strokeWidth={1.5} />
-          Sign out
-        </button>
+        <div className="flex items-center gap-1">
+          {role === 'manager' && <NotificationBell placement="header" />}
+          <button onClick={signOut} className="flex items-center gap-1.5 text-xs text-neutral-400 py-2 pl-3">
+            <LogOut size={15} strokeWidth={1.5} />
+            Sign out
+          </button>
+        </div>
       </header>
 
       {/* Phone: "More" sheet for tabs that don't fit the bar */}

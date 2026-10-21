@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionInfo } from '@/lib/roles';
 import { notifyOwner } from '@/lib/notify';
+import { addNotification } from '@/lib/notifications';
 import {
   deriveOverallStatus,
   fillSupplierStatuses,
@@ -93,6 +94,12 @@ export async function POST(request: NextRequest) {
       title: `Missing from ${supplierName} delivery`,
       message: `${missing.map((m) => `• ${formatQty(m, m.qty)}`).join('\n')}\n\nChecked in by ${delivery.received_by}`,
       url: 'https://dashboard.chebararuba.com/dashboard/orders',
+    });
+    await addNotification(supabase, {
+      kind: 'delivery',
+      title: `Missing from ${supplierName} delivery`,
+      body: missing.map((m) => formatQty(m, m.qty)).join(', '),
+      link: '/dashboard/orders',
     });
   }
 

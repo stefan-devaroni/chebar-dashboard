@@ -5,11 +5,15 @@ import { openMissing, pendingDeliveries, type PurchaseOrder } from '@/lib/purcha
 
 async function getBadges(): Promise<NavBadges> {
   try {
-    const { data } = await createClient().from('purchase_orders').select('*');
+    const supabase = createClient();
+    const [{ data }, { count }] = await Promise.all([
+      supabase.from('purchase_orders').select('*'),
+      supabase.from('job_applications').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+    ]);
     const orders = (data ?? []) as PurchaseOrder[];
-    return { missing: openMissing(orders).length, pending: pendingDeliveries(orders).length };
+    return { missing: openMissing(orders).length, pending: pendingDeliveries(orders).length, applicants: count ?? 0 };
   } catch {
-    return { missing: 0, pending: 0 };
+    return { missing: 0, pending: 0, applicants: 0 };
   }
 }
 

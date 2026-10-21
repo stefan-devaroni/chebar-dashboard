@@ -17,14 +17,14 @@ export function manageLink(token: string): string {
   return `${SITE}/reserve/#manage=${token}`;
 }
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 }
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 const isHappyHour = (t: string) => toMinutes(t) >= 17 * 60 && toMinutes(t) < 19 * 60;
 
-function layout(body: string): string {
+export function layout(body: string): string {
   return `<!doctype html><html><body style="margin:0;padding:0;background:#f4f1ea;font-family:Helvetica,Arial,sans-serif;color:#1a1612">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1ea;padding:24px 12px;font-family:Helvetica,Arial,sans-serif;color:#1a1612"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:14px;overflow:hidden;font-family:Helvetica,Arial,sans-serif">

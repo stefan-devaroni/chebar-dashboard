@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { notifyOwner } from '@/lib/notify';
+import { addNotification } from '@/lib/notifications';
 import { RESTAURANT_EMAIL, sendEmail } from '@/lib/email';
 import { confirmationEmail } from '@/lib/reservation-emails';
 import {
@@ -168,7 +169,13 @@ export async function POST(request: NextRequest) {
       tags: ['fork_and_knife'],
       priority: 3,
     });
-    [emailed] = await Promise.all([sent, alert]);
+    const bell = addNotification(supabase, {
+      kind: 'reservation',
+      title: `New booking: ${r.party_size} ${r.party_size === 1 ? 'guest' : 'guests'}`,
+      body: `${formatDate(r.date)} at ${formatTime(r.time)} · ${r.name}`,
+      link: `/dashboard/reservations?date=${r.date}`,
+    });
+    [emailed] = await Promise.all([sent, alert, bell]);
   }
 
   return json(request, {
