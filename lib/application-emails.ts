@@ -47,7 +47,18 @@ ${rows.map(([k, v]) => `<tr><td style="padding:3px 12px 3px 0;color:#7a736c;whit
 </table>
 <p style="margin:16px 0 4px;font-size:13px;color:#7a736c">Experience</p>
 <p style="margin:0 0 20px;font-size:14px;line-height:1.6;white-space:pre-line">${esc(experience)}</p>
-<a href="${link}" style="display:inline-block;background:#d4a574;color:#1a1612;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold;font-size:14px">Open in the dashboard</a>`);
-  const text = [`${a.name} applied`, '', ...rows.map(([k, v]) => `${k}: ${v}`), '', 'Experience:', experience, '', `Open in the dashboard: ${link}`].join('\n');
+<a href="${link}" style="display:inline-block;background:#d4a574;color:#1a1612;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:bold;font-size:14px">Open in the dashboard</a>
+<p style="margin:16px 0 0;font-size:13px;color:#7a736c">Reply to this email to write to ${esc(firstName(a.name))}.</p>`);
+  const text = [
+    `${a.name} applied`,
+    '',
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    '',
+    'Experience:',
+    experience,
+    '',
+    `Open in the dashboard: ${link}`,
+    `Reply to this email to write to ${firstName(a.name)}.`,
+  ].join('\n');
   return { subject, html, text };
 }

@@ -9,12 +9,14 @@ export async function sendEmail({
   html,
   text,
   from = FROM,
+  replyTo = RESTAURANT_EMAIL,
 }: {
   to: string;
   subject: string;
   html: string;
   text: string;
   from?: string;
+  replyTo?: string;
 }): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return false;
@@ -22,7 +24,7 @@ export async function sendEmail({
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [to], reply_to: RESTAURANT_EMAIL, subject, html, text }),
+      body: JSON.stringify({ from, to: [to], reply_to: replyTo, subject, html, text }),
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) console.error('Email not sent', res.status, await res.text().catch(() => ''));

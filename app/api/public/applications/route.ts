@@ -84,7 +84,8 @@ export async function POST(request: NextRequest) {
   await Promise.all([
     addNotification(supabase, { kind: 'application', title: `New job application: ${app.name}`, body: roles, link: `/dashboard/applicants?id=${id}` }),
     notifyOwner({ title: 'New job application', message: `${app.name} · ${roles}`, url: link, tags: ['briefcase'], priority: 3 }),
-    sendEmail({ to: RESTAURANT_EMAIL, from: JOBS_FROM, ...alert }),
+    // Replying to the alert writes straight to the applicant
+    sendEmail({ to: RESTAURANT_EMAIL, from: JOBS_FROM, replyTo: app.email, ...alert }),
     sendEmail({ to: app.email, from: JOBS_FROM, ...thanks }),
   ]);
 
