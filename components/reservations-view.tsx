@@ -13,6 +13,8 @@ import {
   isActive,
   slotOf,
   slotTimes,
+  STRIP_DAYS,
+  stripStart,
   toMinutes,
   type Reservation,
   type ReservationSettings,
@@ -129,7 +131,10 @@ export function ReservationsView({
     setDate(d);
     setShowCancelled(false);
     window.history.replaceState(null, '', `?date=${d}`);
-    if (d < range.from || d > range.to) load(d < range.from ? d : range.from, d > range.to ? d : range.to);
+    // Load the bookings for the strip around the new day (the strip may have moved)
+    const from = stripStart(d, today);
+    const to = addDays(from, STRIP_DAYS - 1);
+    if (from !== range.from || to !== range.to) load(from, to);
   }
 
   function flash(message: string) {
@@ -173,7 +178,8 @@ export function ReservationsView({
     flash(ok ? 'Booking link copied' : BOOKING_PAGE_URL);
   }
 
-  const strip = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(today, i)), [today]);
+  const firstDay = stripStart(date, today);
+  const strip = useMemo(() => Array.from({ length: STRIP_DAYS }, (_, i) => addDays(firstDay, i)), [firstDay]);
   const guestsByDate = useMemo(() => {
     const out: Record<string, number> = {};
     for (const r of rows) if (isActive(r)) out[r.date] = (out[r.date] ?? 0) + r.party_size;

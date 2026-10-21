@@ -104,6 +104,13 @@ export function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// The Bookings day strip shows the next two weeks. When the day being viewed falls
+// outside them, the strip moves so that day sits near its middle.
+export const STRIP_DAYS = 14;
+export function stripStart(date: string, today: string): string {
+  return date >= today && date <= addDays(today, STRIP_DAYS - 1) ? today : addDays(date, -6);
+}
+
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86_400_000);
 }

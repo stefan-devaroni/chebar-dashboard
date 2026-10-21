@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getSessionInfo } from '@/lib/roles';
 import { ReservationsView } from '@/components/reservations-view';
-import { addDays, arubaNow, isDate, normalizeSettings, type Reservation } from '@/lib/reservations';
+import { addDays, arubaNow, isDate, normalizeSettings, STRIP_DAYS, stripStart, type Reservation } from '@/lib/reservations';
 import { isMissingTable, RESERVATION_COLUMNS } from '@/lib/reservations-server';
 
 export const dynamic = 'force-dynamic';
@@ -10,10 +10,9 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
   const supabase = createClient();
   const today = arubaNow().date;
   const date = isDate(searchParams.date) ? searchParams.date : today;
-  // Load the next two weeks (for the day strip) plus the day being viewed
-  const stripEnd = addDays(today, 13);
-  const from = date < today ? date : today;
-  const to = date > stripEnd ? date : stripEnd;
+  // Load the days shown in the day strip (the next two weeks, or the two weeks around the day being viewed)
+  const from = stripStart(date, today);
+  const to = addDays(from, STRIP_DAYS - 1);
 
   const [session, { data: rows, error }, { data: settingsRow }] = await Promise.all([
     getSessionInfo().catch(() => null),
