@@ -34,6 +34,11 @@ export interface Delivery {
   resolution?: 'reordered' | 'dismissed' | null;
 }
 
+export interface PoNumber {
+  number: string; // "PO-1001"
+  issued_at: string;
+}
+
 export interface PurchaseOrder {
   id: string;
   created_at: string;
@@ -43,6 +48,19 @@ export interface PurchaseOrder {
   supplier_statuses: Record<string, string> | null;
   archived_at?: string | null;
   deliveries?: Record<string, Delivery> | null;
+  po_numbers?: Record<string, PoNumber> | null; // one purchase order number per supplier part
+}
+
+// Che Bar's details on purchase orders
+export const BUYER = {
+  name: 'Che Bar',
+  address: ['Paseo Herencia Mall', 'J.E. Irausquin Blvd 382A', 'Palm Beach, Aruba'],
+  phone: '+297 699 1696',
+  email: 'chebararuba@gmail.com',
+};
+
+export function poNumberOf(order: PurchaseOrder, supplierId: string): string | null {
+  return order.po_numbers?.[supplierId]?.number ?? null;
 }
 
 export interface SupplierContact {

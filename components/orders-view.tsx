@@ -4,15 +4,16 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardCheck, Copy, Package, RotateCcw, Trash2,
+  AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardCheck, Copy, Download, FileText, Package, Printer, RotateCcw, Share2, Trash2, X,
 } from 'lucide-react';
 import { DeliveryChecklist } from '@/components/delivery-checklist';
 import { copyText } from '@/lib/clipboard';
 import {
-  buildMissingMessage, buildOrderMessage, getSupplierStatus, groupBySupplier, openMissing, shortDate, NO_SUPPLIER, type Delivery, type OrderItem, type PurchaseOrder, type SupplierContact,
+  buildMissingMessage, buildOrderMessage, getSupplierStatus, groupBySupplier, openMissing, poNumberOf, shortDate, NO_SUPPLIER, type Delivery, type OrderItem, type PurchaseOrder, type SupplierContact,
 } from '@/lib/purchasing';
 
 type Section = { order: PurchaseOrder; supplierId: string; supplierName: string; items: OrderItem[] };
+type PoFile = { number: string; supplierName: string; file: File; url: string };
 
 const sectionHeading = 'flex items-center gap-2 text-xs uppercase tracking-widest font-medium px-1 mb-2';
 const primaryBtn = 'w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-base font-medium transition';
@@ -35,6 +36,8 @@ export function OrdersView({
   const [checkingKey, setCheckingKey] = useState<string | null>(null);
   const [openReceived, setOpenReceived] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [poBusy, setPoBusy] = useState<string | null>(null);
+  const [poFile, setPoFile] = useState<PoFile | null>(null);
 
   const supplierById = Object.fromEntries(suppliers.map((s) => [s.id, s]));
   const contactFor = (sid: string) => (sid === NO_SUPPLIER ? undefined : supplierById[sid]);
@@ -73,6 +76,38 @@ export function OrdersView({
     }
     setCopiedKey(key);
     setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2500);
+  }
+
+  // Make (or re-make) the purchase order PDF for one supplier part; the first time it gets its PO number
+  async function openPurchaseOrder(s: Section) {
+    const key = keyOf(s.order.id, s.supplierId);
+    setPoBusy(key);
+    try {
+      const res = await fetch('/api/orders/po', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: s.order.id, supplierId: s.supplierId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Could not make the purchase order. Try again.');
+        return;
+      }
+      const blob = await res.blob();
+      const number = res.headers.get('X-PO-Number') ?? 'Purchase order';
+      const issued = res.headers.get('X-PO-Issued') ?? new Date().toISOString();
+      const name = `${number} ${s.supplierName}`.replace(/[^\w .-]+/g, '').trim() + '.pdf';
+      const file = new File([blob], name, { type: 'application/pdf' });
+      setPoFile({ number, supplierName: s.supplierName, file, url: URL.createObjectURL(blob) });
+      replaceOrder({ ...s.order, po_numbers: { ...(s.order.po_numbers ?? {}), [s.supplierId]: { number, issued_at: issued } } });
+    } finally {
+      setPoBusy(null);
+    }
+  }
+
+  function closePurchaseOrder() {
+    if (poFile) URL.revokeObjectURL(poFile.url);
+    setPoFile(null);
   }
 
   async function setStatus(order: PurchaseOrder, supplierId: string, status: 'draft' | 'sent') {
@@ -210,7 +245,10 @@ export function OrdersView({
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0">
                       <p className="font-medium truncate">{s.supplierName}</p>
-                      <p className="text-xs text-neutral-500">{s.items.length} item{s.items.length !== 1 ? 's' : ''}</p>
+                      <p className="text-xs text-neutral-500">
+                        {poNumberOf(s.order, s.supplierId) ? `${poNumberOf(s.order, s.supplierId)} · ` : ''}
+                        {s.items.length} item{s.items.length !== 1 ? 's' : ''}
+                      </p>
                     </div>
                     <button
                       onClick={() => removeSection(s)}
@@ -228,10 +266,18 @@ export function OrdersView({
                     {copied ? <Check size={18} strokeWidth={2} /> : <Copy size={18} strokeWidth={2} />}
                     {copied ? 'Copied — paste it to the supplier' : 'Copy order'}
                   </button>
-                  <button onClick={() => setStatus(s.order, s.supplierId, 'sent')} className={cn(secondaryBtn, 'w-full mt-2 py-3.5')}>
-                    <Check size={16} strokeWidth={2} />
-                    Mark as sent
-                  </button>
+                  <div className="flex gap-2 mt-2">
+                    {s.supplierId !== NO_SUPPLIER && (
+                      <button onClick={() => openPurchaseOrder(s)} disabled={poBusy === key} className={cn(secondaryBtn, 'py-3.5 disabled:opacity-60')}>
+                        <FileText size={16} strokeWidth={2} />
+                        {poBusy === key ? 'Making PDF…' : 'Purchase order'}
+                      </button>
+                    )}
+                    <button onClick={() => setStatus(s.order, s.supplierId, 'sent')} className={cn(secondaryBtn, 'py-3.5')}>
+                      <Check size={16} strokeWidth={2} />
+                      Mark as sent
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -251,6 +297,7 @@ export function OrdersView({
                 <div key={key} className={cn('bg-white border rounded-xl p-4', isChecking ? 'border-blue-300' : 'border-neutral-200')}>
                   <p className="font-medium truncate">{s.supplierName}</p>
                   <p className="text-xs text-neutral-500 mb-3">
+                    {poNumberOf(s.order, s.supplierId) ? `${poNumberOf(s.order, s.supplierId)} · ` : ''}
                     Ordered {shortDate(s.order.created_at)} · {s.items.length} item{s.items.length !== 1 ? 's' : ''}
                   </p>
                   {isChecking ? (
@@ -268,9 +315,19 @@ export function OrdersView({
                         <ClipboardCheck size={18} strokeWidth={2} />
                         Check delivery
                       </button>
+                      {s.supplierId !== NO_SUPPLIER && (
+                        <button
+                          onClick={() => openPurchaseOrder(s)}
+                          disabled={poBusy === key}
+                          className={cn(secondaryBtn, 'w-full mt-2 disabled:opacity-60')}
+                        >
+                          <FileText size={16} strokeWidth={2} />
+                          {poBusy === key ? 'Making PDF…' : `${poNumberOf(s.order, s.supplierId) ?? 'Purchase order'} (PDF)`}
+                        </button>
+                      )}
                       <button
                         onClick={() => setStatus(s.order, s.supplierId, 'draft')}
-                        className="w-full mt-2 py-2 text-xs text-neutral-400 hover:text-neutral-600"
+                        className="w-full mt-1 py-2 text-xs text-neutral-400 hover:text-neutral-600"
                       >
                         Not sent yet? Move back to &ldquo;To send&rdquo;
                       </button>
@@ -335,10 +392,22 @@ export function OrdersView({
                       ) : (
                         <div className="mb-3"><ItemList items={s.items} /></div>
                       )}
-                      <button onClick={() => undoReceive(s)} className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-ink py-2">
-                        <RotateCcw size={14} strokeWidth={2} />
-                        Undo check-in
-                      </button>
+                      <div className="flex items-center justify-between gap-2">
+                        <button onClick={() => undoReceive(s)} className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-ink py-2">
+                          <RotateCcw size={14} strokeWidth={2} />
+                          Undo check-in
+                        </button>
+                        {s.supplierId !== NO_SUPPLIER && (
+                          <button
+                            onClick={() => openPurchaseOrder(s)}
+                            disabled={poBusy === key}
+                            className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-ink py-2 disabled:opacity-60"
+                          >
+                            <FileText size={14} strokeWidth={2} />
+                            {poBusy === key ? 'Making PDF…' : poNumberOf(s.order, s.supplierId) ?? 'Purchase order'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -361,7 +430,9 @@ export function OrdersView({
           {showHistory && (
             <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100 overflow-hidden mt-2">
               {history.map((o) => {
-                const names = groupBySupplier(o.items).map(([, g]) => g.supplierName).join(', ');
+                const names = groupBySupplier(o.items)
+                  .map(([sid, g]) => (poNumberOf(o, sid) ? `${poNumberOf(o, sid)} ${g.supplierName}` : g.supplierName))
+                  .join(', ');
                 return (
                   <div key={o.id} className="flex items-center gap-3 pl-4 pr-2 py-3 min-h-[56px]">
                     <span className="flex-1 min-w-0">
@@ -383,6 +454,67 @@ export function OrdersView({
         </section>
       )}
 
+      {poFile && <PurchaseOrderSheet po={poFile} onClose={closePurchaseOrder} />}
+    </div>
+  );
+}
+
+// What to do with a freshly made purchase order PDF: share it (WhatsApp, email…), download it, or print it
+function PurchaseOrderSheet({ po, onClose }: { po: PoFile; onClose: () => void }) {
+  const canShare = typeof navigator !== 'undefined' && !!navigator.canShare?.({ files: [po.file] });
+
+  async function share() {
+    try {
+      await navigator.share({ files: [po.file], title: `Purchase order ${po.number}`, text: `Purchase order ${po.number} from Che Bar` });
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') alert("Couldn't share from this device. Use Download instead.");
+    }
+  }
+
+  function download() {
+    const a = document.createElement('a');
+    a.href = po.url;
+    a.download = po.file.name;
+    a.click();
+  }
+
+  const action = 'w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-base font-medium transition';
+  return (
+    <div className="fixed inset-0 z-50 bg-ink/40 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div
+        className="bg-cream w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-widest text-neutral-500">Purchase order</p>
+            <p className="font-display text-2xl">{po.number}</p>
+            <p className="text-sm text-neutral-600 truncate">{po.supplierName}</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="w-10 h-10 -mr-2 -mt-1 flex items-center justify-center text-neutral-400 hover:text-ink">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="space-y-2">
+          {canShare && (
+            <button onClick={share} className={cn(action, 'bg-ink text-cream')}>
+              <Share2 size={18} strokeWidth={2} />
+              Send (WhatsApp, email…)
+            </button>
+          )}
+          <button onClick={download} className={cn(action, canShare ? 'bg-white border border-neutral-300 text-ink' : 'bg-ink text-cream')}>
+            <Download size={18} strokeWidth={2} />
+            Download PDF
+          </button>
+          <button onClick={() => window.open(po.url, '_blank')} className={cn(action, 'bg-white border border-neutral-300 text-ink')}>
+            <Printer size={18} strokeWidth={2} />
+            Open to print
+          </button>
+        </div>
+        {!canShare && (
+          <p className="text-xs text-neutral-500 mt-3">To send it by WhatsApp or email, download it and attach the file.</p>
+        )}
+      </div>
     </div>
   );
 }
