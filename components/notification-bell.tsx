@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Bell, Briefcase, CalendarCheck, Truck, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -102,7 +103,8 @@ export function NotificationBell({ placement }: { placement: 'header' | 'sidebar
         )}
       </button>
 
-      {open && (
+      {/* Rendered on <body>: inside the sidebar or top bar, page content could cover it */}
+      {open && createPortal(
         <div className="fixed inset-0 z-50" onClick={() => setOpen(false)}>
           <div
             onClick={(e) => e.stopPropagation()}
@@ -151,7 +153,8 @@ export function NotificationBell({ placement }: { placement: 'header' | 'sidebar
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
