@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_MODEL, AI_REFUSAL_ERROR } from '@/lib/ai';
 
 const SYSTEM_PROMPT = `You are a social media marketing strategist for Ché Bar, a restaurant in Aruba.
 
@@ -82,16 +83,21 @@ Requirements:
 - Captions should be ready to copy-paste
 - Hashtags should be a good mix of reach + niche (8-12 per post)
 
-Return the JSON array of ideas.`;
+Return the JSON object described above.`;
 
   try {
     const anthropic = new Anthropic({ apiKey });
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
+      model: AI_MODEL,
+      max_tokens: 16000,
+      output_config: { effort: 'low' },
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
     });
+
+    if (response.stop_reason === 'refusal') {
+      return NextResponse.json({ error: AI_REFUSAL_ERROR }, { status: 422 });
+    }
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

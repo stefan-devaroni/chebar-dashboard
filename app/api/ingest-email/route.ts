@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { parseRevelCsv } from '@/lib/revel-parser';
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_MODEL } from '@/lib/ai';
 
 // SendGrid Inbound Parse webhook endpoint.
 // Receives multipart/form-data with email fields + attachments.
@@ -187,8 +188,9 @@ async function parsePdfWithClaude(
   const anthropic = new Anthropic({ apiKey: process.env.API_KEY_ANTHROPIC! });
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
+    model: AI_MODEL,
+    max_tokens: 16000,
+    output_config: { effort: 'low' },
     messages: [
       {
         role: 'user',
@@ -245,7 +247,11 @@ Rules:
     ],
   });
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  // Read the text by block type: the reply can start with a thinking block.
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
 
   try {
     const parsed = JSON.parse(text);
@@ -333,7 +339,9 @@ Rules:
       status: 'failed',
       file_name: fileName,
       records_written: 0,
-      error_message: 'Failed to parse Claude response as JSON',
+      error_message: response.stop_reason === 'refusal'
+        ? 'Claude declined to read this PDF.'
+        : 'Failed to parse Claude response as JSON',
       raw_data: text.slice(0, 5000),
     });
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_MODEL, AI_REFUSAL_ERROR } from '@/lib/ai';
 
 const SYSTEM_PROMPT = `You are the owner of Che Bar, a beloved breakfast-by-day / pizza-and-cocktails-by-night restaurant in Aruba. You're writing replies to customer reviews on Google and TripAdvisor.
 
@@ -36,11 +37,16 @@ Write only the reply text, nothing else.`;
 
     const anthropic = new Anthropic({ apiKey });
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 512,
+      model: AI_MODEL,
+      max_tokens: 2048,
+      output_config: { effort: 'low' },
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     });
+
+    if (response.stop_reason === 'refusal') {
+      return NextResponse.json({ error: AI_REFUSAL_ERROR }, { status: 422 });
+    }
 
     const reply = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_MODEL, AI_REFUSAL_ERROR } from '@/lib/ai';
 
 const SYSTEM_PROMPT = `You are a restaurant operations analyst for Ché Bar, a breakfast-by-day / pizza-and-cocktails-by-night restaurant in Aruba. The owner is asking you questions about their business performance.
 
@@ -72,11 +73,16 @@ export async function POST(request: NextRequest) {
 
     const anthropic = new Anthropic({ apiKey });
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
+      model: AI_MODEL,
+      max_tokens: 8192,
+      output_config: { effort: 'low' },
       system: SYSTEM_PROMPT + dataContext,
       messages,
     });
+
+    if (response.stop_reason === 'refusal') {
+      return NextResponse.json({ error: AI_REFUSAL_ERROR }, { status: 422 });
+    }
 
     const answer = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

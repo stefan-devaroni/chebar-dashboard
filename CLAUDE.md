@@ -111,7 +111,7 @@ From a handoff doc Stefan wrote in the chat app (Oct 2026). **Its menu section i
 - **Recharts** for any charts
 - **Netlify** (paid plan) for hosting — Next.js Runtime plugin auto-detected
 - **GitHub** for source
-- **Anthropic API** for the review responder (Claude Sonnet 4.6)
+- **Anthropic API** for the AI features (review responder, report chat and analysis, emailed Revel PDFs, marketing). The model is set once in `lib/ai.ts`; when Anthropic retires it, change it there.
 
 Env vars expected:
 - `NEXT_PUBLIC_SUPABASE_URL`
