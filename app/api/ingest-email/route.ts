@@ -4,6 +4,8 @@ import { parseRevelCsv } from '@/lib/revel-parser';
 import Anthropic from '@anthropic-ai/sdk';
 import { AI_MODEL } from '@/lib/ai';
 import { readInboundEmail, type InboundFile } from '@/lib/inbound-email';
+import { readRevelCsv, saveRevelReport } from '@/lib/revel-reports';
+import { arubaNow } from '@/lib/reservations';
 
 // SendGrid Inbound Parse webhook endpoint for mail to anything@ingest.chebararuba.com
 // (MX -> mx.sendgrid.net). Receives multipart/form-data with email fields + attachments.
@@ -49,6 +51,7 @@ export async function POST(request: NextRequest) {
     // Process each attachment
     for (const attachment of files) {
       const fileName = attachment.name;
+      const filePath = await keepOriginal(supabase, attachment);
       const isCSV =
         attachment.type === 'text/csv' ||
         attachment.type === 'application/csv' ||
@@ -60,7 +63,7 @@ export async function POST(request: NextRequest) {
         attachment.type === 'application/pdf' || fileName.endsWith('.pdf');
 
       if (isPDF) {
-        const pdfResult = await parsePdfWithClaude(attachment, from, subject, supabase);
+        const pdfResult = await parsePdfWithClaude(attachment, from, subject, supabase, filePath);
         results.push(pdfResult);
         continue;
       }
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
           report_type: 'unknown',
           status: 'skipped',
           file_name: fileName,
+          file_path: filePath,
           records_written: 0,
           error_message: `Unsupported file type (${attachment.type}). Upload manually on the Reports page.`,
           raw_data: rawPreview,
@@ -84,6 +88,30 @@ export async function POST(request: NextRequest) {
       }
 
       const csvText = new TextDecoder('utf-8').decode(attachment.bytes);
+
+      // Revel's Sales Summary and Product Mix exports, read exactly (lib/revel-reports.ts)
+      const revel = readRevelCsv(csvText, fileName);
+      if (revel) {
+        const ingestionId = crypto.randomUUID();
+        const saved = await saveRevelReport(supabase, revel, { source: 'revel-email', ingestionId });
+        await supabase.from('report_ingestions').insert({
+          id: ingestionId,
+          sender_email: from,
+          subject,
+          report_type: revel.kind === 'sales_summary' ? 'daily_sales' : 'product_mix',
+          status: saved.errors.length > 0 ? 'failed' : 'processed',
+          file_name: fileName,
+          file_path: filePath,
+          report_date: saved.firstDate,
+          records_written: saved.records,
+          error_message: saved.errors.length > 0 ? saved.errors.join('; ').slice(0, 2000) : null,
+          ai_summary: saved.summary,
+          raw_data: csvText.slice(0, 200000),
+        });
+        results.push({ file: fileName, status: saved.errors.length > 0 ? 'failed' : 'processed', records: saved.records });
+        continue;
+      }
+
       const parsed = parseRevelCsv(csvText, fileName);
 
       if (parsed.type === 'daily_sales') {
@@ -120,6 +148,7 @@ export async function POST(request: NextRequest) {
           report_type: 'daily_sales',
           status: errors.length > 0 ? 'failed' : 'processed',
           file_name: fileName,
+          file_path: filePath,
           records_written: recordsWritten,
           error_message: errors.length > 0 ? errors.join('; ') : null,
           raw_data: csvText.slice(0, 5000),
@@ -141,6 +170,7 @@ export async function POST(request: NextRequest) {
           report_type: 'product_mix',
           status: 'processed',
           file_name: fileName,
+          file_path: filePath,
           records_written: parsed.data.items.length,
           ai_summary: `Top 10 items:\n${summary}`,
           raw_data: csvText.slice(0, 200000),
@@ -155,6 +185,7 @@ export async function POST(request: NextRequest) {
           report_type: 'unknown',
           status: 'skipped',
           file_name: fileName,
+          file_path: filePath,
           records_written: 0,
           error_message: 'Could not identify report format. Upload manually on the Reports page.',
           raw_data: csvText.slice(0, 5000),
@@ -171,11 +202,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Keeps the original report in the private revel-reports bucket, so numbers can be checked later
+async function keepOriginal(supabase: any, file: InboundFile): Promise<string | null> {
+  const path = `${arubaNow().date}/${Date.now()}-${file.name.replace(/[^\w.-]+/g, '_').slice(-100)}`;
+  const { error } = await supabase.storage
+    .from('revel-reports')
+    .upload(path, Buffer.from(file.bytes), { contentType: file.type || 'application/octet-stream' });
+  return error ? null : path;
+}
+
 async function parsePdfWithClaude(
   attachment: InboundFile,
   from: string,
   subject: string,
-  supabase: any
+  supabase: any,
+  filePath: string | null
 ) {
   const fileName = attachment.name;
   const base64 = Buffer.from(attachment.bytes).toString('base64');
@@ -197,6 +238,7 @@ async function parsePdfWithClaude(
           {
             type: 'text',
             text: `Extract structured data from this Revel POS restaurant report PDF.
+(Email subject: "${subject.slice(0, 200)}". File name: "${fileName.slice(0, 200)}". These may help with the report date.)
 
 Determine the report type and return ONLY valid JSON (no markdown, no backticks):
 
@@ -214,6 +256,7 @@ For a daily sales / sales summary report:
       "covers_breakfast": number or 0,
       "covers_lunch": number or 0,
       "covers_dinner": number or 0,
+      "orders_total": number or 0,
       "labor_cost": number or 0
     }
   ]
@@ -222,6 +265,7 @@ For a daily sales / sales summary report:
 For a product mix report:
 {
   "type": "product_mix",
+  "date": "YYYY-MM-DD" or null,
   "items": [
     { "name": "Item Name", "category": "Category", "quantity": number, "revenue": number }
   ]
@@ -235,6 +279,10 @@ Rules:
 - Daypart names vary: morning/breakfast, lunch/afternoon, dinner/evening — map accordingly
 - If only a single total revenue is shown without daypart breakdown, put it in revenue_total and set dayparts to 0
 - Dates must be ISO format YYYY-MM-DD
+- Revel business days run from 6 AM to 6 AM; a report from 10/21 6:00 AM to 10/22 6:00 AM is for 2026-10-21
+- covers = guests ("Total Number Of People"); orders_total = number of orders or checks
+- For a product mix, "date" is the one business day it covers, or null when it covers more than one day.
+  List every item with its exact printed name, not only the top sellers, and leave out total and subtotal lines
 - Return raw numbers, no currency symbols or commas`,
           },
         ],
@@ -267,6 +315,7 @@ Rules:
             covers_breakfast: day.covers_breakfast ?? 0,
             covers_lunch: day.covers_lunch ?? 0,
             covers_dinner: day.covers_dinner ?? 0,
+            orders_total: day.orders_total || null,
             labor_cost: day.labor_cost ?? 0,
             entered_by: 'revel-pdf-auto',
           },
@@ -285,6 +334,8 @@ Rules:
         report_type: 'daily_sales',
         status: errors.length > 0 ? 'failed' : 'processed',
         file_name: fileName,
+        file_path: filePath,
+        report_date: parsed.data[0]?.date ?? null,
         records_written: recordsWritten,
         error_message: errors.length > 0 ? errors.join('; ') : null,
         raw_data: text.slice(0, 10000),
@@ -296,21 +347,36 @@ Rules:
       const summary = parsed.items
         .sort((a: any, b: any) => b.revenue - a.revenue)
         .slice(0, 10)
-        .map((item: any) => `${item.name}: ${item.quantity} sold, $${item.revenue.toFixed(0)}`)
+        .map((item: any) => `${item.name}: ${item.quantity} sold, $${Number(item.revenue).toFixed(0)}`)
         .join('\n');
 
+      // One business day: the items go to the Sales tab (product_sales); a longer range is only kept here
+      const ingestionId = crypto.randomUUID();
+      const date = typeof parsed.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : null;
+      const saved = date
+        ? await supabase.rpc('replace_product_sales', { p_date: date, p_items: parsed.items, p_ingestion: ingestionId })
+        : null;
+
       await supabase.from('report_ingestions').insert({
+        id: ingestionId,
         sender_email: from,
         subject,
         report_type: 'product_mix',
-        status: 'processed',
+        status: saved?.error ? 'failed' : 'processed',
         file_name: fileName,
+        file_path: filePath,
+        report_date: date,
         records_written: parsed.items.length,
+        error_message: saved?.error
+          ? saved.error.message
+          : date
+            ? null
+            : 'Covers more than one day, so the items were not added to the Sales tab.',
         ai_summary: `Top 10 items:\n${summary}`,
         raw_data: text.slice(0, 200000),
       });
 
-      return { file: fileName, status: 'processed', records: parsed.items.length };
+      return { file: fileName, status: saved?.error ? 'failed' : 'processed', records: parsed.items.length };
 
     } else {
       await supabase.from('report_ingestions').insert({
@@ -319,6 +385,7 @@ Rules:
         report_type: 'unknown',
         status: 'processed',
         file_name: fileName,
+        file_path: filePath,
         records_written: 0,
         ai_summary: parsed.summary ?? text.slice(0, 2000),
         raw_data: text.slice(0, 10000),
@@ -333,6 +400,7 @@ Rules:
       report_type: 'unknown',
       status: 'failed',
       file_name: fileName,
+      file_path: filePath,
       records_written: 0,
       error_message: response.stop_reason === 'refusal'
         ? 'Claude declined to read this PDF.'
