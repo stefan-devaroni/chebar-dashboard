@@ -86,7 +86,7 @@ From a handoff doc Stefan wrote in the chat app (Oct 2026). **Its menu section i
 
 **Mornings menu:** website matches the handoff (pancakes $14.50–15.75, Big Breakfast $14, etc.). A breakfast research study (`~/breakfast-research/`, Oct 6) recommends a new 18-item menu with new prices — NOT confirmed by Stefan; don't publish those prices until he locks them. Fresh OJ (large sells ~7.8/day) is not on the menu yet.
 
-**Live music:** currently **Thursdays + Sundays, 7–9 PM** (Stefan, Oct 15). The handoff says it was cut to Fridays + Saturdays — that is not what is happening; confirm before changing the website.
+**Live music:** **Thursdays, Fridays and Sundays** in September and October 2026, and staying that way for now (Stefan, Oct 23; this replaces his Oct 15 "Thursdays + Sundays"). Times vary around 7–9 PM. The schedule before September is unknown: ask before using it for a music-ROI comparison. The handoff says it was cut to Fridays + Saturdays — that is not what is happening; confirm before changing the website.
 
 **Decisions (locked):** Marketing agency RFP going to MRZ Media, Aruwave, Strena, EMP, The Warm People (target ~$2K/mo). Agencies get Meta **Standard access only, never Full Control**. POS: 2 Revel iPads (inside counter + outside bar), each with its own drawer; per-iPad Z-read at close. Cash handover: 3-person witness, tips stay in drawer, 1% of shift cash sales = variance tolerance, cash to the upstairs drop safe.
 
