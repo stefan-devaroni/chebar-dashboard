@@ -7,7 +7,7 @@ export default async () => {
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false },
   });
-  await syncMeta(supabase, 'daily');
+  await syncMeta(supabase, 'daily', 25_000); // scheduled functions may run 30 s
 };
 
 // 11:00 UTC = 7 AM in Aruba

@@ -38,3 +38,21 @@ alter table meta_sync_log enable row level security;
 revoke all on social_daily, meta_sync_log from anon, authenticated;
 
 notify pgrst, 'reload schema';
+
+-- Oct 23: posts keep Meta's own type (feed, reels, story, carousel_album, post); interactions per post;
+-- Instagram follower audience (country, city, age, gender), replaced on every sync
+alter table social_posts drop constraint if exists social_posts_post_type_check;
+alter table social_posts add column if not exists interactions integer;
+
+create table if not exists social_audience (
+  platform text not null,
+  breakdown text not null,
+  label text not null,
+  value integer not null,
+  updated_at timestamptz not null default now(),
+  primary key (platform, breakdown, label)
+);
+alter table social_audience enable row level security;
+revoke all on social_audience from anon, authenticated;
+
+notify pgrst, 'reload schema';
