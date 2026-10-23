@@ -126,12 +126,12 @@ Env vars expected:
 **Deployed and working:**
 - `/login` — Supabase auth
 - `/dashboard` — overview with task counts and recent completions
-- `/dashboard/tasks` — full task browser, 258 seeded tasks across 7 categories
+- `/dashboard/tasks` — full task browser (7 categories; Stefan cleared the seeded tasks on Oct 11 2026, see below)
 - `/dashboard/metrics` — placeholder page only
 - `/dashboard/review-responder` — AI-powered review response generator (Anthropic API)
 
 **Database (Supabase):**
-- `categories`, `subcategories`, `tasks`, `task_activity` — all populated from `supabase/master_plan.md`
+- `categories`, `subcategories`, `tasks`, `task_activity` — populated from `supabase/master_plan.md`. On Oct 11 2026 Stefan cleared all tasks on purpose; the 259 old tasks and their history are kept in `backups.tasks_2026_10_11` and `backups.task_activity_2026_10_11`.
 - `daily_metrics` — empty, awaiting entry UI
 - `reviews_snapshot` — empty (Google Places API integration was built but parked)
 - `reviews_individual` — schema not yet added (was part of the parked reviews tracking)
