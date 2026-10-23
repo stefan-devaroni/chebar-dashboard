@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 import { buildPurchaseOrderPdf } from '@/lib/po-pdf';
 import { BUYER, groupBySupplier, NO_SUPPLIER, type PoNumber, type PurchaseOrder } from '@/lib/purchasing';
 
-// Purchase order PDF for one supplier's part of an order (managers). The first time, the
+// Purchase order PDF for one supplier's part of an order (Purchasing access). The first time, the
 // supplier part gets its own PO number; after that the same number and date are reused.
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  const session = await getSessionInfo();
-  if (session?.role !== 'manager') return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  const session = await sessionWith('purchasing');
+  if (!session) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
 
   const { orderId, supplierId } = await request.json().catch(() => ({}));
   if (typeof orderId !== 'string' || typeof supplierId !== 'string' || supplierId === NO_SUPPLIER) {

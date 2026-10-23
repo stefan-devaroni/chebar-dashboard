@@ -6,9 +6,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { NotificationBell } from '@/components/notification-bell';
-import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, UtensilsCrossed, LogOut } from 'lucide-react';
+import type { Permission } from '@/lib/permissions';
+import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
 
-type Role = 'manager' | 'employee';
 export type NavBadges = { missing: number; pending: number; applicants: number };
 
 type NavItem = {
@@ -16,28 +16,43 @@ type NavItem = {
   label: string;
   shortLabel?: string; // phone tab bar, where space is tight
   icon: typeof Sun;
-  roles: Role[];
-  phoneMore?: Role[]; // on phones, these roles find this item under "More"
+  perm: Permission;
+  unless?: Permission; // hidden when the person also has this (it's covered there)
   alsoActiveOn?: string[];
   badge?: keyof NavBadges;
 };
 
-// Order set by Stefan (Oct 23 2026). Schedule and Team are one item for managers (two tabs on the page)
+// Order set by Stefan (Oct 23 2026). Each person sees what they can open (lib/permissions.ts)
 const allNavItems: NavItem[] = [
-  { href: '/dashboard', label: 'Today', icon: Sun, roles: ['manager'] },
-  { href: '/dashboard/checklists', label: 'Checklists', icon: ClipboardCheck, roles: ['manager', 'employee'], phoneMore: ['manager'] },
-  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, roles: ['manager'], alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
-  { href: '/dashboard/schedule', label: 'Schedule & Team', shortLabel: 'Schedule', icon: CalendarDays, roles: ['manager'], alsoActiveOn: ['/dashboard/team'] },
-  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['employee'] },
-  { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, roles: ['manager', 'employee'] },
-  { href: '/dashboard/menu', label: 'Menu & Recipes', shortLabel: 'Menu', icon: UtensilsCrossed, roles: ['manager', 'employee'], phoneMore: ['manager'] },
-  { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], phoneMore: ['employee'], badge: 'pending' },
-  { href: '/dashboard/handbook', label: 'Handbook', icon: BookOpen, roles: ['manager', 'employee'], phoneMore: ['manager', 'employee'] },
-  { href: '/dashboard/applicants', label: 'Applicants', icon: Briefcase, roles: ['manager'], phoneMore: ['manager'], badge: 'applicants' },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'], phoneMore: ['manager'] },
-  { href: '/dashboard/sales', label: 'Sales', icon: TrendingUp, roles: ['manager'], phoneMore: ['manager'] },
-  { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone, roles: ['manager'], phoneMore: ['manager'] },
+  { href: '/dashboard', label: 'Today', icon: Sun, perm: 'today' },
+  { href: '/dashboard/checklists', label: 'Checklists', icon: ClipboardCheck, perm: 'checklists' },
+  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, perm: 'purchasing', alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
+  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, perm: 'schedule' },
+  // With the schedule too, Team is a tab on that page ("Schedule & Team")
+  { href: '/dashboard/team', label: 'Team', icon: Users, perm: 'team', unless: 'schedule' },
+  { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, perm: 'reservations' },
+  { href: '/dashboard/menu', label: 'Menu & Recipes', shortLabel: 'Menu', icon: UtensilsCrossed, perm: 'menu' },
+  // Purchasing has the deliveries on its Orders screen
+  { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, perm: 'deliveries', unless: 'purchasing', badge: 'pending' },
+  { href: '/dashboard/handbook', label: 'Handbook', icon: BookOpen, perm: 'handbook' },
+  { href: '/dashboard/applicants', label: 'Applicants', icon: Briefcase, perm: 'applicants', badge: 'applicants' },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, perm: 'tasks' },
+  { href: '/dashboard/sales', label: 'Sales', icon: TrendingUp, perm: 'sales' },
+  { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone, perm: 'marketing' },
 ];
+
+function itemsFor(perms: readonly string[]): NavItem[] {
+  const has = (p: Permission) => perms.includes(p);
+  return allNavItems
+    .filter((i) => has(i.perm) && !(i.unless && has(i.unless)))
+    .map((i) => (i.href === '/dashboard/schedule' && has('team') ? { ...i, label: 'Schedule & Team', shortLabel: 'Schedule', alsoActiveOn: ['/dashboard/team'] } : i));
+}
+
+// Phones: the tab bar has 5 slots. With more items than that, the first 4 from this list get
+// a tab (shown in nav order) and the rest go under "More".
+const PHONE_SLOTS = 5;
+const PHONE_FIRST = ['/dashboard', '/dashboard/purchasing', '/dashboard/schedule', '/dashboard/reservations', '/dashboard/checklists', '/dashboard/menu', '/dashboard/orders', '/dashboard/team'];
+const phoneRank = (i: NavItem) => (PHONE_FIRST.includes(i.href) ? PHONE_FIRST.indexOf(i.href) : PHONE_FIRST.length);
 
 function Badge({ count, kind, className }: { count: number; kind: keyof NavBadges; className?: string }) {
   if (count <= 0) return null;
@@ -52,13 +67,16 @@ function Badge({ count, kind, className }: { count: number; kind: keyof NavBadge
   );
 }
 
-export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0, applicants: 0 } }: { role?: Role; badges?: NavBadges }) {
+export function NavSidebar({ perms, badges = { missing: 0, pending: 0, applicants: 0 } }: { perms: Permission[]; badges?: NavBadges }) {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
-  const navItems = allNavItems.filter((i) => i.roles.includes(role));
-  const phoneTabs = navItems.filter((i) => !i.phoneMore?.includes(role));
-  const phoneMore = navItems.filter((i) => i.phoneMore?.includes(role));
+  const navItems = itemsFor(perms);
+  const onBar = navItems.length <= PHONE_SLOTS ? navItems : [...navItems].sort((a, b) => phoneRank(a) - phoneRank(b)).slice(0, PHONE_SLOTS - 1);
+  const phoneTabs = navItems.filter((i) => onBar.includes(i));
+  const phoneMore = navItems.filter((i) => !onBar.includes(i));
+  // The bell's alerts are mostly job applications (and it reads /api/notifications, which needs Applicants)
+  const bell = perms.includes('applicants');
 
   const isActive = (item: NavItem) =>
     pathname === item.href ||
@@ -86,7 +104,7 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
             <Link href={navItems[0]?.href ?? '/dashboard'} className="font-display text-2xl block">Che Bar</Link>
             <p className="text-[10px] uppercase tracking-widest text-neutral-400 mt-1">Dashboard</p>
           </div>
-          {role === 'manager' && <NotificationBell placement="sidebar" />}
+          {bell && <NotificationBell placement="sidebar" />}
         </div>
         <nav className="flex-1 px-3 overflow-y-auto">
           {navItems.map((item) => {
@@ -123,7 +141,7 @@ export function NavSidebar({ role = 'manager', badges = { missing: 0, pending: 0
       <header className="lg:hidden fixed top-0 inset-x-0 z-40 bg-ink text-cream h-14 flex items-center justify-between px-4">
         <span className="font-display text-xl">Che Bar</span>
         <div className="flex items-center gap-1">
-          {role === 'manager' && <NotificationBell placement="header" />}
+          {bell && <NotificationBell placement="header" />}
           <button onClick={signOut} className="flex items-center gap-1.5 text-xs text-neutral-400 py-2 pl-3">
             <LogOut size={15} strokeWidth={1.5} />
             Sign out

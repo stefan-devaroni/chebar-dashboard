@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { getSessionInfo, screenRole } from '@/lib/roles';
 import { ChecklistsView } from '@/components/checklists-view';
 import { businessDate, type Checklist, type ChecklistCheck, type ChecklistItem, type Department } from '@/lib/checklists';
 import { isDate } from '@/lib/reservations';
@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic';
 export default async function ChecklistsPage({ searchParams }: { searchParams: { date?: string } }) {
   const supabase = createClient();
   const session = await getSessionInfo().catch(() => null);
-  const role = session?.role ?? 'employee';
+  const role = screenRole(session, 'checklists.edit');
   const today = businessDate();
-  // Managers can look back at past days; staff always see today
+  // Checklist editors can look back at past days; others always see today
   const date = role === 'manager' && isDate(searchParams.date) && searchParams.date < today ? searchParams.date : today;
 
   const [lists, items, checks, member] = await Promise.all([

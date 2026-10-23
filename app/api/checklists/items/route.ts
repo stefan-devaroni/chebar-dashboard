@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 
 // Checklist items — managers only. Removing an item sets active=false so past
 // days still show what was on the list.
@@ -10,12 +11,10 @@ export const dynamic = 'force-dynamic';
 const ITEM_COLUMNS = 'id, checklist_id, text, sort, active';
 const cleanText = (v: unknown) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 200) : '');
 
-async function isManager() {
-  return (await getSessionInfo())?.role === 'manager';
-}
+const allowed = () => sessionWith('checklists.edit');
 
 export async function POST(request: NextRequest) {
-  if (!(await isManager())) return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!(await allowed())) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   const text = cleanText(body.text);
   if (typeof body.checklist_id !== 'string' || !text) return NextResponse.json({ error: 'Type what needs to be done.' }, { status: 400 });
@@ -38,7 +37,7 @@ export async function POST(request: NextRequest) {
 
 // { id, text?, active? } or { order: [id, id, ...] } to save a new order
 export async function PUT(request: NextRequest) {
-  if (!(await isManager())) return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!(await allowed())) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   const supabase = createClient();
 

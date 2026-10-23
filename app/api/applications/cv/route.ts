@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 
-// Opens an applicant's CV (managers): a signed link that works for 5 minutes, so CVs never sit at a public address.
+// Opens an applicant's CV (Applicants access): a signed link that works for 5 minutes, so CVs never sit at a public address.
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const session = await getSessionInfo();
-  if (session?.role !== 'manager') return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!(await sessionWith('applicants'))) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
 
   const id = request.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });

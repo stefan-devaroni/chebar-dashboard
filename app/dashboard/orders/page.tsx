@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import { OrdersView } from '@/components/orders-view';
 import { DeliveriesView } from '@/components/deliveries-view';
 import { getSessionInfo } from '@/lib/roles';
+import { can } from '@/lib/permissions';
 import type { PurchaseOrder } from '@/lib/purchasing';
 
 export const dynamic = 'force-dynamic';
@@ -11,14 +12,15 @@ export const dynamic = 'force-dynamic';
 export default async function OrdersPage() {
   const supabase = createClient();
   const session = await getSessionInfo().catch(() => null);
-  const isManager = session?.role === 'manager';
+  // Purchasing gets the full orders screen; Deliveries-only logins the check-in list
+  const purchasing = can(session?.perms, 'purchasing');
 
   const { data: orders } = await supabase
     .from('purchase_orders')
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (!isManager) {
+  if (!purchasing) {
     return (
       <div>
         <header className="mb-6">

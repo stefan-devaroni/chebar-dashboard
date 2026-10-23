@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionInfo } from '@/lib/roles';
+import { can, NO_ACCESS } from '@/lib/permissions';
 
 export async function GET() {
   const supabase = createClient();
@@ -12,8 +13,8 @@ export async function GET() {
     .select('*')
     .order('start_date', { ascending: false });
 
-  // Employees only see their own requests (reasons can be private)
-  if (session.role === 'employee') {
+  // Without schedule editing, people only see their own requests (reasons can be private)
+  if (!can(session.perms, 'schedule.edit')) {
     if (!session.memberId) return NextResponse.json([]);
     query = query.eq('team_member_id', session.memberId);
   }
@@ -31,11 +32,11 @@ export async function POST(request: NextRequest) {
   const session = await getSessionInfo();
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  // Employees can only file a *request* for themselves; managers can add
+  // Staff can only file a *request* for themselves; schedule editors can add
   // approved time off for anyone directly.
-  const isEmployee = session.role === 'employee';
-  const teamMemberId = isEmployee ? session.memberId : body.team_member_id;
-  const status = isEmployee ? 'requested' : body.status || 'approved';
+  const requestOnly = !can(session.perms, 'schedule.edit');
+  const teamMemberId = requestOnly ? session.memberId : body.team_member_id;
+  const status = requestOnly ? 'requested' : body.status || 'approved';
 
   if (!teamMemberId) {
     return NextResponse.json({ error: 'No team member linked to this login' }, { status: 400 });
@@ -57,12 +58,11 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(data);
 }
 
-// Approve / deny a request — managers only (middleware already blocks employee PUTs,
-// this is defense in depth).
+// Approve / deny a request: schedule editors only (the middleware checks this too)
 export async function PUT(request: NextRequest) {
   const session = await getSessionInfo();
-  if (!session || session.role !== 'manager') {
-    return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!session || !can(session.perms, 'schedule.edit')) {
+    return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   }
 
   const { id, status } = await request.json();
@@ -84,8 +84,8 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const session = await getSessionInfo();
-  if (!session || session.role !== 'manager') {
-    return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!session || !can(session.perms, 'schedule.edit')) {
+    return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   }
 
   const supabase = createClient();

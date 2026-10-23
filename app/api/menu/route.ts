@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 import { MENU_ITEM_COLUMNS, parseMenuInput } from '@/lib/menu';
 
 // Menu & recipes. All staff can read; only managers add or change items.
@@ -14,14 +15,11 @@ export async function GET() {
   return NextResponse.json(data);
 }
 
-async function manager() {
-  const session = await getSessionInfo();
-  return session?.role === 'manager' ? session : null;
-}
+const allowed = () => sessionWith('menu.edit');
 
 export async function POST(request: NextRequest) {
-  const session = await manager();
-  if (!session) return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  const session = await allowed();
+  if (!session) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   const parsed = parseMenuInput({ menu: 'mornings', station: 'kitchen', ingredients: [], ...body });
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
@@ -50,8 +48,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const session = await manager();
-  if (!session) return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  const session = await allowed();
+  if (!session) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   if (typeof body.id !== 'string') return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   const { id, ...fields } = body;

@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionInfo } from '@/lib/roles';
 import { parseManagerEmails } from '@/lib/role-logic';
+import { can, canManageMember, NO_ACCESS } from '@/lib/permissions';
 
 // Set or reset a team member's dashboard password, so staff can log in
 // without sign-in emails (Supabase's built-in email only reaches account members).
 export async function POST(request: NextRequest) {
   const session = await getSessionInfo();
-  if (!session || session.role !== 'manager') {
-    return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!session || !can(session.perms, 'team')) {
+    return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   }
 
   const { memberId, password } = await request.json();
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   const supabase = createClient(); // service role: auth admin API
   const { data: member } = await supabase
     .from('team_members')
-    .select('id, role, email')
+    .select('id, role, email, access')
     .eq('id', memberId)
     .single();
   if (!member?.email) {
@@ -27,13 +28,12 @@ export async function POST(request: NextRequest) {
   }
 
   const email = String(member.email).toLowerCase();
-  const owners = parseManagerEmails(process.env.ALLOWED_EMAILS);
-  if (owners.includes(email)) {
+  if (parseManagerEmails(process.env.ALLOWED_EMAILS).includes(email)) {
     return NextResponse.json({ error: "The owner's own login can't be changed here" }, { status: 403 });
   }
-  // Managers can set employee passwords; only the owner can set another manager's
-  if ((member.role === 'manager' || member.role === 'owner') && !owners.includes(session.email)) {
-    return NextResponse.json({ error: 'Only the owner can set passwords for managers' }, { status: 403 });
+  // Owners can set anyone's password; others only for staff who can't open more than they can
+  if (!canManageMember(session, member)) {
+    return NextResponse.json({ error: 'Only an owner can set this password' }, { status: 403 });
   }
 
   const created = await supabase.auth.admin.createUser({ email, password, email_confirm: true });

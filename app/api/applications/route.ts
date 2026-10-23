@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 import { APPLICATION_COLUMNS, STATUSES } from '@/lib/applications';
 
 // Applicants tab (managers): list, update status and notes, delete (with the CV).
@@ -9,13 +10,10 @@ export const dynamic = 'force-dynamic';
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status });
 
-async function manager() {
-  const session = await getSessionInfo();
-  return session?.role === 'manager' ? session : null;
-}
+const allowed = () => sessionWith('applicants');
 
 export async function GET() {
-  if (!(await manager())) return json({ error: 'Managers only' }, 403);
+  if (!(await allowed())) return json({ error: NO_ACCESS }, 403);
   const { data, error } = await createClient()
     .from('job_applications')
     .select(APPLICATION_COLUMNS)
@@ -26,8 +24,8 @@ export async function GET() {
 
 // { id, status?, notes? }
 export async function PUT(request: NextRequest) {
-  const session = await manager();
-  if (!session) return json({ error: 'Managers only' }, 403);
+  const session = await allowed();
+  if (!session) return json({ error: NO_ACCESS }, 403);
   const body = await request.json().catch(() => ({}));
   if (typeof body.id !== 'string') return json({ error: 'Missing id' }, 400);
 
@@ -47,7 +45,7 @@ export async function PUT(request: NextRequest) {
 
 // { id } — removes the application and its CV for good
 export async function DELETE(request: NextRequest) {
-  if (!(await manager())) return json({ error: 'Managers only' }, 403);
+  if (!(await allowed())) return json({ error: NO_ACCESS }, 403);
   const body = await request.json().catch(() => ({}));
   if (typeof body.id !== 'string') return json({ error: 'Missing id' }, 400);
   const supabase = createClient();

@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
-// "Schedule & Team" is one menu item for managers: the schedule and the team list are two tabs.
-// Employees only get the schedule, so their page shows no tabs.
+// "Schedule & Team" is one menu item for those with both: the schedule and the team list are two
+// tabs. With only one of them the page shows no tabs.
 
 const TABS = [
   { key: 'schedule', href: '/dashboard/schedule', label: 'Schedule' },

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { WeeklySchedule } from '@/components/weekly-schedule';
-import { getSessionInfo } from '@/lib/roles';
+import { getSessionInfo, screenRole } from '@/lib/roles';
+import { can } from '@/lib/permissions';
 import { ScheduleTeamTabs } from '@/components/schedule-team-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +9,8 @@ export const dynamic = 'force-dynamic';
 export default async function SchedulePage() {
   const supabase = createClient();
   const session = await getSessionInfo().catch(() => null);
-  const role = session?.role ?? 'employee';
+  const role = screenRole(session, 'schedule.edit');
+  const team = can(session?.perms, 'team');
 
   const { data: members } = await supabase
     .from('team_members')
@@ -35,10 +37,10 @@ export default async function SchedulePage() {
 
   return (
     <div>
-      <header className={role === 'manager' ? 'mb-4' : 'mb-6'}>
-        <h1 className="font-display text-3xl">{role === 'manager' ? 'Schedule & Team' : 'Schedule'}</h1>
+      <header className={team ? 'mb-4' : 'mb-6'}>
+        <h1 className="font-display text-3xl">{team ? 'Schedule & Team' : 'Schedule'}</h1>
       </header>
-      {role === 'manager' && <ScheduleTeamTabs active="schedule" />}
+      {team && <ScheduleTeamTabs active="schedule" />}
       <WeeklySchedule
         initialShifts={shifts ?? []}
         members={members ?? []}

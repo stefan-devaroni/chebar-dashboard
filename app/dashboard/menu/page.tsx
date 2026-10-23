@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { getSessionInfo, screenRole } from '@/lib/roles';
 import { MenuView } from '@/components/menu-view';
 import { MENU_ITEM_COLUMNS, type MenuItem } from '@/lib/menu';
 import { isMissingTable } from '@/lib/reservations-server';
@@ -14,7 +14,7 @@ export default async function MenuPage() {
 
   return (
     <div className="max-w-3xl">
-      <MenuView initialItems={(data ?? []) as MenuItem[]} role={session?.role ?? 'employee'} setupNeeded={isMissingTable(error)} />
+      <MenuView initialItems={(data ?? []) as MenuItem[]} role={screenRole(session, 'menu.edit')} setupNeeded={isMissingTable(error)} />
     </div>
   );
 }

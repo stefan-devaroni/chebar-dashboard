@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { openMissing, stageCounts, type PurchaseOrder } from '@/lib/purchasing';
 import { arubaNow, formatTime, isActive, toMinutes, type Reservation } from '@/lib/reservations';
 import { businessDate, formatClock, isLate, runsOn, type Checklist } from '@/lib/checklists';
+import { getSessionInfo } from '@/lib/roles';
+import { can, type Permission } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +44,9 @@ export default async function TodayPage() {
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const checklistDay = businessDate();
+  // Each card only for those who can open that part of the dashboard
+  const session = await getSessionInfo().catch(() => null);
+  const show = (p: Permission) => can(session?.perms, p);
   const [
     { data: orders },
     { data: shifts },
@@ -116,7 +121,7 @@ export default async function TodayPage() {
         <h1 className="font-display text-3xl">Today</h1>
       </header>
 
-      {issues.length > 0 && (
+      {show('purchasing') && issues.length > 0 && (
         <Link
           href="/dashboard/orders"
           className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 mb-4 text-sm hover:bg-red-100 transition"
@@ -132,7 +137,7 @@ export default async function TodayPage() {
       )}
 
       <div className="space-y-4">
-        {!bookingsError && (
+        {show('reservations') && !bookingsError && (
           <Card title="Reservations" href="/dashboard/reservations">
             {todayBookings.length === 0 ? (
               <p className="text-sm text-neutral-500">No bookings today.</p>
@@ -162,7 +167,7 @@ export default async function TodayPage() {
           </Card>
         )}
 
-        {!listsError && listStatus.length > 0 && (
+        {show('checklists') && !listsError && listStatus.length > 0 && (
           <Card title="Checklists" href="/dashboard/checklists">
             <ul className="space-y-1.5">
               {listStatus.map((s) => (
@@ -185,65 +190,71 @@ export default async function TodayPage() {
           </Card>
         )}
 
-        <Card title="Orders" href="/dashboard/orders">
-          <div className="grid grid-cols-3 gap-2">
-            {stats.map((s) => (
-              <div key={s.label} className="bg-neutral-50 rounded-lg py-3 text-center">
-                <p className={cn('text-2xl font-semibold tabular-nums', s.value > 0 ? s.tone : 'text-neutral-300')}>{s.value}</p>
-                <p className="text-[11px] text-neutral-500 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card title="Working today" href="/dashboard/schedule">
-          {todayShifts.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nobody is scheduled today.</p>
-          ) : (
-            <div className="space-y-3">
-              {[
-                { label: 'Morning', list: morning, icon: <Sun size={14} className="text-amber-500" /> },
-                { label: 'Evening', list: evening, icon: <Moon size={14} className="text-indigo-400" /> },
-              ].filter((g) => g.list.length > 0).map((g) => (
-                <div key={g.label}>
-                  <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-neutral-400 mb-1.5">{g.icon}{g.label}</p>
-                  <ul className="space-y-1">
-                    {g.list.map((s) => (
-                      <li key={s.id} className="flex items-center justify-between text-sm">
-                        <span className={s.team_members?.department === 'kitchen' ? 'text-orange-700' : 'text-blue-700'}>
-                          {s.team_members?.name ?? '—'}
-                        </span>
-                        <span className="text-neutral-500 tabular-nums">{shortTime(s.start_time)}–{shortTime(s.end_time)}</span>
-                      </li>
-                    ))}
-                  </ul>
+        {show('purchasing') && (
+          <Card title="Orders" href="/dashboard/orders">
+            <div className="grid grid-cols-3 gap-2">
+              {stats.map((s) => (
+                <div key={s.label} className="bg-neutral-50 rounded-lg py-3 text-center">
+                  <p className={cn('text-2xl font-semibold tabular-nums', s.value > 0 ? s.tone : 'text-neutral-300')}>{s.value}</p>
+                  <p className="text-[11px] text-neutral-500 mt-0.5">{s.label}</p>
                 </div>
               ))}
             </div>
-          )}
-        </Card>
+          </Card>
+        )}
 
-        <Card title="Tasks" href="/dashboard/tasks">
-          {!openTasks ? (
-            <p className="text-sm text-neutral-500">No open tasks.</p>
-          ) : (
-            <>
-              <ul className="space-y-1.5 mb-2">
-                {(tasks ?? []).map((t) => (
-                  <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate">{t.title}</span>
-                    {t.due_date && (
-                      <span className="text-xs text-neutral-500 shrink-0">
-                        {new Date(t.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    )}
-                  </li>
+        {show('schedule') && (
+          <Card title="Working today" href="/dashboard/schedule">
+            {todayShifts.length === 0 ? (
+              <p className="text-sm text-neutral-500">Nobody is scheduled today.</p>
+            ) : (
+              <div className="space-y-3">
+                {[
+                  { label: 'Morning', list: morning, icon: <Sun size={14} className="text-amber-500" /> },
+                  { label: 'Evening', list: evening, icon: <Moon size={14} className="text-indigo-400" /> },
+                ].filter((g) => g.list.length > 0).map((g) => (
+                  <div key={g.label}>
+                    <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-neutral-400 mb-1.5">{g.icon}{g.label}</p>
+                    <ul className="space-y-1">
+                      {g.list.map((s) => (
+                        <li key={s.id} className="flex items-center justify-between text-sm">
+                          <span className={s.team_members?.department === 'kitchen' ? 'text-orange-700' : 'text-blue-700'}>
+                            {s.team_members?.name ?? '—'}
+                          </span>
+                          <span className="text-neutral-500 tabular-nums">{shortTime(s.start_time)}–{shortTime(s.end_time)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
-              {openTasks > 3 && <p className="text-xs text-neutral-400">+ {openTasks - 3} more</p>}
-            </>
-          )}
-        </Card>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {show('tasks') && (
+          <Card title="Tasks" href="/dashboard/tasks">
+            {!openTasks ? (
+              <p className="text-sm text-neutral-500">No open tasks.</p>
+            ) : (
+              <>
+                <ul className="space-y-1.5 mb-2">
+                  {(tasks ?? []).map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate">{t.title}</span>
+                      {t.due_date && (
+                        <span className="text-xs text-neutral-500 shrink-0">
+                          {new Date(t.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {openTasks > 3 && <p className="text-xs text-neutral-400">+ {openTasks - 3} more</p>}
+              </>
+            )}
+          </Card>
+        )}
       </div>
     </div>
   );

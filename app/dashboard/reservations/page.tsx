@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { getSessionInfo, screenRole } from '@/lib/roles';
 import { ReservationsView } from '@/components/reservations-view';
 import { addDays, arubaNow, isDate, normalizeSettings, STRIP_DAYS, stripStart, type Reservation } from '@/lib/reservations';
 import { isMissingTable, RESERVATION_COLUMNS } from '@/lib/reservations-server';
@@ -34,7 +34,7 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
         initialRange={{ from, to }}
         initialReservations={(rows ?? []) as Reservation[]}
         initialSettings={normalizeSettings(settingsRow)}
-        role={session?.role ?? 'employee'}
+        role={screenRole(session, 'reservations.settings')}
         setupNeeded={isMissingTable(error)}
         emailsEnabled={Boolean(process.env.RESEND_API_KEY)}
       />

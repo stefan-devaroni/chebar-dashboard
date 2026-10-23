@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 import { MENU_ITEM_COLUMNS } from '@/lib/menu';
 
-// Upload a dish photo (managers): multipart form with `file` and `itemId`.
+// Upload a dish photo (menu editors): multipart form with `file` and `itemId`.
 // The browser shrinks photos before sending, so they stay well under the limit.
 
 export const dynamic = 'force-dynamic';
@@ -12,8 +13,8 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
 export async function POST(request: NextRequest) {
-  const session = await getSessionInfo();
-  if (session?.role !== 'manager') return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  const session = await sessionWith('menu.edit');
+  if (!session) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
 
   const form = await request.formData().catch(() => null);
   const file = form?.get('file');

@@ -1,26 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { parseManagerEmails, resolveRole } from '@/lib/role-logic';
-
-// Employees may only use these (managers get everything).
-const EMPLOYEE_PAGES = ['/dashboard/schedule', '/dashboard/orders', '/dashboard/reservations', '/dashboard/checklists', '/dashboard/menu', '/dashboard/handbook'];
-function employeeApiAllowed(pathname: string, method: string): boolean {
-  if (pathname.startsWith('/api/shifts') && method === 'GET') return true;
-  if (pathname.startsWith('/api/time-off') && (method === 'GET' || method === 'POST')) return true;
-  if (pathname.startsWith('/api/team') && method === 'GET') return true;
-  // Deliveries: see orders and check in what arrived — nothing else on orders
-  if (pathname === '/api/orders' && method === 'GET') return true;
-  if (pathname === '/api/orders/receive' && method === 'POST') return true;
-  // Reservations: see, add and update bookings; only managers change the settings
-  if (pathname === '/api/reservations' && ['GET', 'POST', 'PUT'].includes(method)) return true;
-  if (pathname === '/api/reservations/settings' && method === 'GET') return true;
-  // Checklists: read today's lists and tick items; only managers edit the lists
-  if (pathname === '/api/checklists' && method === 'GET') return true;
-  if (pathname === '/api/checklists/check' && method === 'POST') return true;
-  // Menu & recipes and the handbook: read only
-  if ((pathname === '/api/menu' || pathname === '/api/handbook') && method === 'GET') return true;
-  return false;
-}
+import { parseManagerEmails } from '@/lib/role-logic';
+import { canCallApi, canOpenPage, landingPage, NO_ACCESS, resolvePermissions } from '@/lib/permissions';
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -75,22 +56,21 @@ export async function updateSession(request: NextRequest) {
   if (user && (isDashboard || isProtectedApi)) {
     const email = user.email?.toLowerCase() ?? '';
 
-    // Managers: emails in ALLOWED_EMAILS (owner, co-owner, GM), or a team member
-    // with role owner/manager. Employees: team members with a linked email.
-    const managerEmails = parseManagerEmails(process.env.ALLOWED_EMAILS);
-    let member: { role: string; active: boolean | null } | null = null;
-    if (!managerEmails.includes(email)) {
-      // Errors (e.g. email column not migrated yet) leave member null => allowlist only
-      const { data } = await supabase
-        .from('team_members')
-        .select('role, active')
-        .eq('email', email)
-        .maybeSingle();
-      member = data;
+    // Emails in ALLOWED_EMAILS have full access. Everyone else needs an active team member
+    // with this email; what they may open comes from their role and access list
+    // (lib/permissions.ts). The row is read through the current_member() RPC because
+    // team_members itself isn't readable with a user session (supabase/access.sql).
+    const allowlisted = parseManagerEmails(process.env.ALLOWED_EMAILS).includes(email);
+    let member: { role: string; active: boolean | null; access: string[] | null } | null = null;
+    if (!allowlisted) {
+      // Errors leave member null => allowlist only
+      const { data } = await supabase.rpc('current_member').maybeSingle();
+      member = data as typeof member;
     }
-    const role = resolveRole(email, managerEmails, member);
+    const access = resolvePermissions(allowlisted, member);
+    const home = access && landingPage(access.perms);
 
-    if (!role) {
+    if (!access || !home) {
       if (isProtectedApi) {
         return withSession(NextResponse.json({ error: 'Not authorized' }, { status: 403 }));
       }
@@ -101,15 +81,14 @@ export async function updateSession(request: NextRequest) {
       return withSession(NextResponse.redirect(url));
     }
 
-    if (role === 'employee') {
-      if (isProtectedApi && !employeeApiAllowed(url.pathname, request.method)) {
-        return withSession(NextResponse.json({ error: 'Managers only' }, { status: 403 }));
-      }
-      if (isDashboard && !EMPLOYEE_PAGES.some((p) => url.pathname.startsWith(p))) {
-        url.pathname = '/dashboard/schedule';
-        url.search = '';
-        return withSession(NextResponse.redirect(url));
-      }
+    if (isProtectedApi && !canCallApi(access.perms, url.pathname, request.method)) {
+      return withSession(NextResponse.json({ error: NO_ACCESS }, { status: 403 }));
+    }
+    // A page that isn't theirs: go to the first one that is
+    if (isDashboard && !canOpenPage(access.perms, url.pathname)) {
+      url.pathname = home;
+      url.search = '';
+      return withSession(NextResponse.redirect(url));
     }
   }
 

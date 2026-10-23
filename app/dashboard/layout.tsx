@@ -23,11 +23,10 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [session, badges] = await Promise.all([getSessionInfo().catch(() => null), getBadges()]);
-  const role = session?.role ?? 'employee';
 
   return (
     <div className="flex min-h-screen">
-      <NavSidebar role={role} badges={badges} />
+      <NavSidebar perms={session?.perms ?? []} badges={badges} />
       <main className="flex-1 min-w-0 px-4 pt-20 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6 lg:p-10 max-w-6xl">{children}</main>
     </div>
   );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 import { CHAPTER_COLUMNS, cleanBody, cleanTitle, SECTION_COLUMNS } from '@/lib/handbook';
 
 // Employee handbook. All staff can read; only managers write, reorder or delete.
@@ -18,16 +19,13 @@ export async function GET() {
   return NextResponse.json({ chapters: chapters.data, sections: sections.data });
 }
 
-async function manager() {
-  const session = await getSessionInfo();
-  return session?.role === 'manager' ? session : null;
-}
+const allowed = () => sessionWith('handbook.edit');
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status });
 
 // { kind: 'chapter', title } or { kind: 'section', chapter_id, title }
 export async function POST(request: NextRequest) {
-  if (!(await manager())) return json({ error: 'Managers only' }, 403);
+  if (!(await allowed())) return json({ error: NO_ACCESS }, 403);
   const body = await request.json().catch(() => ({}));
   const title = cleanTitle(body.title);
   if (!title) return json({ error: 'Type a title.' }, 400);
@@ -62,8 +60,8 @@ export async function POST(request: NextRequest) {
 
 // { kind: 'chapter', id, title } | { kind: 'section', id, title?, body? } | { kind: 'order', table, ids }
 export async function PUT(request: NextRequest) {
-  const session = await manager();
-  if (!session) return json({ error: 'Managers only' }, 403);
+  const session = await allowed();
+  if (!session) return json({ error: NO_ACCESS }, 403);
   const body = await request.json().catch(() => ({}));
   const supabase = createClient();
 
@@ -103,7 +101,7 @@ export async function PUT(request: NextRequest) {
 
 // { kind: 'chapter' | 'section', id } — deleting a chapter deletes its sections
 export async function DELETE(request: NextRequest) {
-  if (!(await manager())) return json({ error: 'Managers only' }, 403);
+  if (!(await allowed())) return json({ error: NO_ACCESS }, 403);
   const body = await request.json().catch(() => ({}));
   if (typeof body.id !== 'string' || !['chapter', 'section'].includes(body.kind)) return json({ error: 'Unknown request' }, 400);
   const table = body.kind === 'chapter' ? 'handbook_chapters' : 'handbook_sections';

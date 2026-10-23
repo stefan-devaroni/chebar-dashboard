@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionInfo } from '@/lib/roles';
+import { can } from '@/lib/permissions';
 import { notifyOwner } from '@/lib/notify';
 import { addNotification } from '@/lib/notifications';
 import {
@@ -15,7 +16,7 @@ import {
 } from '@/lib/purchasing';
 
 // Check in one supplier's delivery: what actually arrived vs. what was ordered.
-// Open to employees (whoever receives the delivery), unlike the rest of /api/orders.
+// Open to Deliveries access (whoever receives the delivery), unlike the rest of /api/orders.
 export async function POST(request: NextRequest) {
   const session = await getSessionInfo();
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -40,8 +41,8 @@ export async function POST(request: NextRequest) {
     const by = order.deliveries?.[supplierId]?.received_by;
     return NextResponse.json({ error: `Already checked in${by ? ` by ${by}` : ''}` }, { status: 409 });
   }
-  // Employees only see sent orders; managers may also check in one they forgot to mark sent
-  if (session.role === 'employee' && status !== 'sent') {
+  // Deliveries-only logins see sent orders; Purchasing may also check in one they forgot to mark sent
+  if (!can(session.perms, 'purchasing') && status !== 'sent') {
     return NextResponse.json({ error: 'This order has not been sent yet' }, { status: 403 });
   }
 

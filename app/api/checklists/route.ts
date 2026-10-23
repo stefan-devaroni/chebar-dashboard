@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionInfo } from '@/lib/roles';
+import { sessionWith } from '@/lib/roles';
+import { NO_ACCESS } from '@/lib/permissions';
 import { businessDate, parseListInput } from '@/lib/checklists';
 import { isDate } from '@/lib/reservations';
 
-// Daily checklists. Everyone signed in can read; only managers change the lists.
+// Daily checklists. Everyone with Checklists access can read; only checklist editors change the lists.
 
 export const dynamic = 'force-dynamic';
 
@@ -27,14 +28,11 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ date, lists: lists.data, items: items.data, checks: checks.data });
 }
 
-async function requireManager() {
-  const session = await getSessionInfo();
-  return session?.role === 'manager' ? session : null;
-}
+const allowed = () => sessionWith('checklists.edit');
 
 // Create a list
 export async function POST(request: NextRequest) {
-  if (!(await requireManager())) return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!(await allowed())) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   const parsed = parseListInput({ department: 'all', ...body });
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
@@ -54,7 +52,7 @@ export async function POST(request: NextRequest) {
 // Update a list (name, team, days, done-by time, order). Removing a list sets
 // active=false so past days keep their history.
 export async function PUT(request: NextRequest) {
-  if (!(await requireManager())) return NextResponse.json({ error: 'Managers only' }, { status: 403 });
+  if (!(await allowed())) return NextResponse.json({ error: NO_ACCESS }, { status: 403 });
   const body = await request.json().catch(() => ({}));
   if (typeof body.id !== 'string') return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   const { id, ...fields } = body;
