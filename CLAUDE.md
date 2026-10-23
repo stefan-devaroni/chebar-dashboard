@@ -163,7 +163,7 @@ Env vars expected:
 
 In rough priority order:
 
-1. **Verify review responder works end-to-end.** The `API_KEY_ANTHROPIC` env var was just renamed. Stefan should test on `/dashboard/review-responder`.
+1. ~~**Verify review responder works end-to-end.**~~ Done Oct 22 2026: after the move to Claude Sonnet 5.5 (`lib/ai.ts`), Stefan generated a reply on `/dashboard/reviews` (also the Reviews tab in Marketing).
 2. **Lady B response.** There's an unanswered 1-star TripAdvisor review from March 2026 from a reviewer named "Lady B." Draft a thoughtful public response and post it on TripAdvisor.
 3. **Hotel concierge one-pager.** Printable PDF for visiting nearby hotel concierges (Radisson Blu, Holiday Inn, Playa Linda, Marriott, Hyatt, RIU, Ritz-Carlton). Includes menu highlights, hours, parking, USP, 10% off mechanic.
 4. **June 1 launch checklist.** Convert the menu/hours/POS changes into a concrete week-by-week countdown (~3 weeks out).
