@@ -152,7 +152,7 @@ export function MenuView({ initialItems, role, setupNeeded }: { initialItems: Me
         />
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 mb-5 -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
+      <div className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible pb-1 mb-5 -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
         {FILTERS.map((f) => (
           <button
             key={f.key}

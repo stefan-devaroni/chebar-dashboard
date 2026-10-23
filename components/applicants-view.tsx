@@ -76,7 +76,7 @@ export function ApplicantsView({
         {copied ? 'Link copied' : 'Copy the careers page link'}
       </button>
 
-      <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
+      <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible pb-2 mb-3 -mx-4 px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
         {(['all', ...STATUSES] as const).map((s) => (
           <button
             key={s}

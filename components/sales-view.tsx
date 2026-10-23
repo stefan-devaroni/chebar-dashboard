@@ -48,7 +48,7 @@ export function SalesView({ initial, today }: { initial: SalesData | null; today
 
   return (
     <div>
-      <div className="flex gap-2 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 mb-3 [scrollbar-width:none]">
+      <div className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 mb-3 [scrollbar-width:none]">
         {PERIODS.map((p) => (
           <button
             key={p.key}
@@ -271,7 +271,7 @@ function Products({ products, productDays, days }: { products: ProductTotal[]; p
         )}
 
         {categories.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto -mx-5 px-5 mt-3 pb-1 [scrollbar-width:none]">
+          <div className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible -mx-5 px-5 mt-3 pb-1 [scrollbar-width:none]">
             {['', ...categories].map((name) => (
               <button
                 key={name || 'all'}
