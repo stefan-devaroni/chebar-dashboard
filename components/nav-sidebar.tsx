@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { NotificationBell } from '@/components/notification-bell';
+import { ChangePassword } from '@/components/change-password';
 import type { Permission } from '@/lib/permissions';
 import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
 
@@ -67,7 +68,7 @@ function Badge({ count, kind, className }: { count: number; kind: keyof NavBadge
   );
 }
 
-export function NavSidebar({ perms, badges = { missing: 0, pending: 0, applicants: 0 } }: { perms: Permission[]; badges?: NavBadges }) {
+export function NavSidebar({ perms, email = null, badges = { missing: 0, pending: 0, applicants: 0 } }: { perms: Permission[]; email?: string | null; badges?: NavBadges }) {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -126,6 +127,7 @@ export function NavSidebar({ perms, badges = { missing: 0, pending: 0, applicant
           })}
         </nav>
         <div className="px-3 py-6 border-t border-neutral-800">
+          <ChangePassword email={email} placement="sidebar" />
           <button
             onClick={signOut}
             className="flex items-center gap-3 px-3 py-2 rounded text-sm text-neutral-400 hover:text-cream hover:bg-neutral-900 transition w-full"
@@ -142,6 +144,7 @@ export function NavSidebar({ perms, badges = { missing: 0, pending: 0, applicant
         <span className="font-display text-xl">Che Bar</span>
         <div className="flex items-center gap-1">
           {bell && <NotificationBell placement="header" />}
+          <ChangePassword email={email} placement="header" />
           <button onClick={signOut} className="flex items-center gap-1.5 text-xs text-neutral-400 py-2 pl-3">
             <LogOut size={15} strokeWidth={1.5} />
             Sign out
