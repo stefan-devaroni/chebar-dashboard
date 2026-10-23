@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { NotificationBell } from '@/components/notification-bell';
-import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, ShoppingCart, TrendingUp, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
+import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
 
 type Role = 'manager' | 'employee';
 export type NavBadges = { missing: number; pending: number; applicants: number };
@@ -25,6 +25,7 @@ type NavItem = {
 const allNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Today', icon: Sun, roles: ['manager'] },
   { href: '/dashboard/sales', label: 'Sales', icon: TrendingUp, roles: ['manager'], phoneMore: ['manager'] },
+  { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone, roles: ['manager'], phoneMore: ['manager'] },
   { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, roles: ['manager', 'employee'] },
   { href: '/dashboard/checklists', label: 'Checklists', icon: ClipboardCheck, roles: ['manager', 'employee'], phoneMore: ['manager'] },
   { href: '/dashboard/menu', label: 'Menu & Recipes', shortLabel: 'Menu', icon: UtensilsCrossed, roles: ['manager', 'employee'], phoneMore: ['manager'] },
