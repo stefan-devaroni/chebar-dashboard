@@ -3,9 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { parseRevelCsv } from '@/lib/revel-parser';
 import Anthropic from '@anthropic-ai/sdk';
 import { AI_MODEL } from '@/lib/ai';
+import { readInboundEmail, type InboundFile } from '@/lib/inbound-email';
 
-// SendGrid Inbound Parse webhook endpoint.
-// Receives multipart/form-data with email fields + attachments.
+// SendGrid Inbound Parse webhook endpoint for mail to anything@ingest.chebararuba.com
+// (MX -> mx.sendgrid.net). Receives multipart/form-data with email fields + attachments.
 // Docs: https://docs.sendgrid.com/for-developers/parsing-email/setting-up-the-inbound-parse-webhook
 
 export async function POST(request: NextRequest) {
@@ -25,11 +26,10 @@ export async function POST(request: NextRequest) {
 
     const from = (formData.get('from') as string) ?? '';
     const subject = (formData.get('subject') as string) ?? '';
-    const attachmentCount = parseInt((formData.get('attachments') as string) ?? '0');
+    const { files, text: textBody } = await readInboundEmail(formData);
 
-    // If no attachments, check for inline text/html body that might contain a report
-    if (attachmentCount === 0) {
-      const textBody = (formData.get('text') as string) ?? '';
+    // If no attachments, keep the body and the fields SendGrid sent, to see what arrived
+    if (files.length === 0) {
       await supabase.from('report_ingestions').insert({
         sender_email: from,
         subject,
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         status: 'skipped',
         file_name: null,
         records_written: 0,
-        error_message: 'No attachments found in email.',
+        error_message: `No attachments found in email (fields received: ${Array.from(new Set(formData.keys())).join(', ')}).`,
         raw_data: textBody.slice(0, 5000),
       });
 
@@ -47,11 +47,8 @@ export async function POST(request: NextRequest) {
     const results: { file: string; status: string; records?: number; error?: string }[] = [];
 
     // Process each attachment
-    for (let i = 1; i <= attachmentCount; i++) {
-      const attachment = formData.get(`attachment${i}`) as File | null;
-      if (!attachment) continue;
-
-      const fileName = attachment.name ?? `attachment${i}`;
+    for (const attachment of files) {
+      const fileName = attachment.name;
       const isCSV =
         attachment.type === 'text/csv' ||
         attachment.type === 'application/csv' ||
@@ -69,8 +66,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!isCSV) {
-        const bytes = await attachment.arrayBuffer();
-        const rawPreview = new TextDecoder('utf-8', { fatal: false }).decode(bytes).slice(0, 2000);
+        const rawPreview = new TextDecoder('utf-8', { fatal: false }).decode(attachment.bytes).slice(0, 2000);
 
         await supabase.from('report_ingestions').insert({
           sender_email: from,
@@ -87,7 +83,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const csvText = await attachment.text();
+      const csvText = new TextDecoder('utf-8').decode(attachment.bytes);
       const parsed = parseRevelCsv(csvText, fileName);
 
       if (parsed.type === 'daily_sales') {
@@ -147,7 +143,7 @@ export async function POST(request: NextRequest) {
           file_name: fileName,
           records_written: parsed.data.items.length,
           ai_summary: `Top 10 items:\n${summary}`,
-          raw_data: csvText.slice(0, 10000),
+          raw_data: csvText.slice(0, 200000),
         });
 
         results.push({ file: fileName, status: 'processed', records: parsed.data.items.length });
@@ -176,14 +172,13 @@ export async function POST(request: NextRequest) {
 }
 
 async function parsePdfWithClaude(
-  attachment: File,
+  attachment: InboundFile,
   from: string,
   subject: string,
   supabase: any
 ) {
-  const fileName = attachment.name ?? 'report.pdf';
-  const bytes = await attachment.arrayBuffer();
-  const base64 = Buffer.from(bytes).toString('base64');
+  const fileName = attachment.name;
+  const base64 = Buffer.from(attachment.bytes).toString('base64');
 
   const anthropic = new Anthropic({ apiKey: process.env.API_KEY_ANTHROPIC! });
 
@@ -312,7 +307,7 @@ Rules:
         file_name: fileName,
         records_written: parsed.items.length,
         ai_summary: `Top 10 items:\n${summary}`,
-        raw_data: text.slice(0, 10000),
+        raw_data: text.slice(0, 200000),
       });
 
       return { file: fileName, status: 'processed', records: parsed.items.length };
