@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { NotificationBell } from '@/components/notification-bell';
-import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
+import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, UtensilsCrossed, LogOut } from 'lucide-react';
 
 type Role = 'manager' | 'employee';
 export type NavBadges = { missing: number; pending: number; applicants: number };
@@ -22,20 +22,21 @@ type NavItem = {
   badge?: keyof NavBadges;
 };
 
+// Order set by Stefan (Oct 23 2026). Schedule and Team are one item for managers (two tabs on the page)
 const allNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Today', icon: Sun, roles: ['manager'] },
+  { href: '/dashboard/checklists', label: 'Checklists', icon: ClipboardCheck, roles: ['manager', 'employee'], phoneMore: ['manager'] },
+  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, roles: ['manager'], alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
+  { href: '/dashboard/schedule', label: 'Schedule & Team', shortLabel: 'Schedule', icon: CalendarDays, roles: ['manager'], alsoActiveOn: ['/dashboard/team'] },
+  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['employee'] },
+  { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, roles: ['manager', 'employee'] },
+  { href: '/dashboard/menu', label: 'Menu & Recipes', shortLabel: 'Menu', icon: UtensilsCrossed, roles: ['manager', 'employee'], phoneMore: ['manager'] },
+  { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], phoneMore: ['employee'], badge: 'pending' },
+  { href: '/dashboard/handbook', label: 'Handbook', icon: BookOpen, roles: ['manager', 'employee'], phoneMore: ['manager', 'employee'] },
+  { href: '/dashboard/applicants', label: 'Applicants', icon: Briefcase, roles: ['manager'], phoneMore: ['manager'], badge: 'applicants' },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'], phoneMore: ['manager'] },
   { href: '/dashboard/sales', label: 'Sales', icon: TrendingUp, roles: ['manager'], phoneMore: ['manager'] },
   { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone, roles: ['manager'], phoneMore: ['manager'] },
-  { href: '/dashboard/reservations', label: 'Reservations', shortLabel: 'Bookings', icon: CalendarCheck, roles: ['manager', 'employee'] },
-  { href: '/dashboard/checklists', label: 'Checklists', icon: ClipboardCheck, roles: ['manager', 'employee'], phoneMore: ['manager'] },
-  { href: '/dashboard/menu', label: 'Menu & Recipes', shortLabel: 'Menu', icon: UtensilsCrossed, roles: ['manager', 'employee'], phoneMore: ['manager'] },
-  { href: '/dashboard/purchasing', label: 'Purchasing', icon: ShoppingCart, roles: ['manager'], alsoActiveOn: ['/dashboard/orders'], badge: 'missing' },
-  { href: '/dashboard/schedule', label: 'Schedule', icon: CalendarDays, roles: ['manager', 'employee'] },
-  { href: '/dashboard/orders', label: 'Deliveries', icon: Truck, roles: ['employee'], phoneMore: ['employee'], badge: 'pending' },
-  { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['manager'], phoneMore: ['manager'] },
-  { href: '/dashboard/applicants', label: 'Applicants', icon: Briefcase, roles: ['manager'], phoneMore: ['manager'], badge: 'applicants' },
-  { href: '/dashboard/handbook', label: 'Handbook', icon: BookOpen, roles: ['manager', 'employee'], phoneMore: ['manager', 'employee'] },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, roles: ['manager'], phoneMore: ['manager'] },
 ];
 
 function Badge({ count, kind, className }: { count: number; kind: keyof NavBadges; className?: string }) {

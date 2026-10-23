@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { WeeklySchedule } from '@/components/weekly-schedule';
 import { getSessionInfo } from '@/lib/roles';
+import { ScheduleTeamTabs } from '@/components/schedule-team-tabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,9 +35,10 @@ export default async function SchedulePage() {
 
   return (
     <div>
-      <header className="mb-6">
-        <h1 className="font-display text-3xl">Schedule</h1>
+      <header className={role === 'manager' ? 'mb-4' : 'mb-6'}>
+        <h1 className="font-display text-3xl">{role === 'manager' ? 'Schedule & Team' : 'Schedule'}</h1>
       </header>
+      {role === 'manager' && <ScheduleTeamTabs active="schedule" />}
       <WeeklySchedule
         initialShifts={shifts ?? []}
         members={members ?? []}
