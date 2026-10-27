@@ -144,6 +144,15 @@ const APIS: ApiRule[] = [
 
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(prefix + '/');
 
+// The business summary for prospective buyers (Oct 2026) is for owners only: a manager who may
+// open everything else still can't open these
+const OWNER_ONLY = ['/dashboard/one-pager', '/api/one-pager'];
+
+/** Is this page or API for owners only, whatever else someone may open? */
+export function ownerOnly(pathname: string): boolean {
+  return OWNER_ONLY.some((prefix) => under(pathname, prefix));
+}
+
 /** May these permissions open this dashboard page? Unknown pages are for full access only. */
 export function canOpenPage(perms: readonly string[], pathname: string): boolean {
   if (pathname === '/dashboard' || pathname === '/dashboard/') return has(perms, ['today']);

@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { parseManagerEmails } from '@/lib/role-logic';
-import { canCallApi, canOpenPage, landingPage, NO_ACCESS, resolvePermissions } from '@/lib/permissions';
+import { canCallApi, canOpenPage, landingPage, NO_ACCESS, ownerOnly, resolvePermissions } from '@/lib/permissions';
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -78,6 +78,16 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/login';
       url.searchParams.set('error', 'not_allowed');
       // signOut() queued cookie deletions on supabaseResponse — send them with the redirect
+      return withSession(NextResponse.redirect(url));
+    }
+
+    // The One Pager (sale summary) is for owners only
+    if (ownerOnly(url.pathname) && !access.owner) {
+      if (isProtectedApi) {
+        return withSession(NextResponse.json({ error: NO_ACCESS }, { status: 403 }));
+      }
+      url.pathname = home;
+      url.search = '';
       return withSession(NextResponse.redirect(url));
     }
 

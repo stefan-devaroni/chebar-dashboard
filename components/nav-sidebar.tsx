@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { NotificationBell } from '@/components/notification-bell';
 import { ChangePassword } from '@/components/change-password';
 import type { Permission } from '@/lib/permissions';
-import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
+import { Sun, BookOpen, Briefcase, CalendarCheck, CalendarDays, ClipboardCheck, Ellipsis, FileText, ListChecks, Megaphone, ShoppingCart, TrendingUp, Truck, Users, UtensilsCrossed, LogOut } from 'lucide-react';
 
 export type NavBadges = { missing: number; pending: number; applicants: number };
 
@@ -21,6 +21,7 @@ type NavItem = {
   unless?: Permission; // hidden when the person also has this (it's covered there)
   alsoActiveOn?: string[];
   badge?: keyof NavBadges;
+  ownerOnly?: boolean; // owners only, whatever else someone may open (ownerOnly in lib/permissions.ts)
 };
 
 // Order set by Stefan (Oct 23 2026). Each person sees what they can open (lib/permissions.ts)
@@ -40,12 +41,14 @@ const allNavItems: NavItem[] = [
   { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, perm: 'tasks' },
   { href: '/dashboard/sales', label: 'Sales', icon: TrendingUp, perm: 'sales' },
   { href: '/dashboard/marketing', label: 'Marketing', icon: Megaphone, perm: 'marketing' },
+  // The business summary for prospective buyers (Oct 2026)
+  { href: '/dashboard/one-pager', label: 'One Pager', icon: FileText, perm: 'sales', ownerOnly: true },
 ];
 
-function itemsFor(perms: readonly string[]): NavItem[] {
+function itemsFor(perms: readonly string[], owner: boolean): NavItem[] {
   const has = (p: Permission) => perms.includes(p);
   return allNavItems
-    .filter((i) => has(i.perm) && !(i.unless && has(i.unless)))
+    .filter((i) => has(i.perm) && !(i.unless && has(i.unless)) && (!i.ownerOnly || owner))
     .map((i) => (i.href === '/dashboard/schedule' && has('team') ? { ...i, label: 'Schedule & Team', shortLabel: 'Schedule', alsoActiveOn: ['/dashboard/team'] } : i));
 }
 
@@ -68,11 +71,11 @@ function Badge({ count, kind, className }: { count: number; kind: keyof NavBadge
   );
 }
 
-export function NavSidebar({ perms, email = null, badges = { missing: 0, pending: 0, applicants: 0 } }: { perms: Permission[]; email?: string | null; badges?: NavBadges }) {
+export function NavSidebar({ perms, owner = false, email = null, badges = { missing: 0, pending: 0, applicants: 0 } }: { perms: Permission[]; owner?: boolean; email?: string | null; badges?: NavBadges }) {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
-  const navItems = itemsFor(perms);
+  const navItems = itemsFor(perms, owner);
   const onBar = navItems.length <= PHONE_SLOTS ? navItems : [...navItems].sort((a, b) => phoneRank(a) - phoneRank(b)).slice(0, PHONE_SLOTS - 1);
   const phoneTabs = navItems.filter((i) => onBar.includes(i));
   const phoneMore = navItems.filter((i) => !onBar.includes(i));

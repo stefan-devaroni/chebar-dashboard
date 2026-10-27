@@ -26,7 +26,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen">
-      <NavSidebar perms={session?.perms ?? []} email={session?.email ?? null} badges={badges} />
+      <NavSidebar perms={session?.perms ?? []} owner={session?.owner ?? false} email={session?.email ?? null} badges={badges} />
       <main className="flex-1 min-w-0 px-4 pt-20 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-6 lg:p-10 max-w-6xl">{children}</main>
     </div>
   );
