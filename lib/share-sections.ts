@@ -87,6 +87,27 @@ export function linkStatus(
   return 'active';
 }
 
+/** A browser that comes back within this long of its last action on a link is still on the same visit */
+export const VISIT_GAP_MS = 60 * 60_000;
+
+/**
+ * The summary loads that start a visit: what "opened" counts and max openings limits. Going back to the summary from
+ * a document, or reloading it, within an hour of the same browser's last action on the link is the same visit (Stefan,
+ * Oct 28: Robert's returns from documents were using up his openings). Browsers are told apart by user agent, not
+ * network: Robert's Mac switched addresses between two clicks.
+ */
+export function visitStarts<T extends { viewed_at: string; user_agent: string | null; file: string | null }>(rows: T[]): Set<T> {
+  const last = new Map<string, number>();
+  const starts = new Set<T>();
+  for (const v of [...rows].sort((a, b) => Date.parse(a.viewed_at) - Date.parse(b.viewed_at))) {
+    const at = Date.parse(v.viewed_at);
+    const before = last.get(v.user_agent ?? '');
+    if (!v.file && (before === undefined || at - before > VISIT_GAP_MS)) starts.add(v);
+    last.set(v.user_agent ?? '', at);
+  }
+  return starts;
+}
+
 /** "iPhone, Safari" style description of a browser's user agent */
 export function deviceName(ua: string | null): string {
   if (!ua) return 'Unknown device';

@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionInfo } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { NO_ACCESS } from '@/lib/permissions';
-import { hashPasscode, linkUrl, newPasscode, newSecret, newToken, sealPasscode } from '@/lib/share-links';
-import { DEFAULT_HIDDEN, deviceName, docFile, isSectionKey, linkStatus } from '@/lib/share-sections';
+import { hashPasscode, linkUrl, loadViews, newPasscode, newSecret, newToken, sealPasscode, type ViewRow } from '@/lib/share-links';
+import { DEFAULT_HIDDEN, deviceName, docFile, isSectionKey, linkStatus, visitStarts } from '@/lib/share-sections';
 
 // Owners make and list the private buyer links for the One Pager (owners only; the middleware checks too).
 // The passcode is checked against its hash and also kept encrypted, so an owner can copy it again ([id]/route.ts).
-// The list shows each link's openings and the documents they looked at (share_link_views rows with a file), all of
-// them: the screen shows the latest 10 and the rest on request.
+// The list shows each link's openings (visits: going back to the summary within one isn't listed or counted) and the
+// documents they looked at (share_link_views rows with a file), all of them: the screen shows the latest 10 and the
+// rest on request.
 
 export const dynamic = 'force-dynamic';
 
@@ -16,48 +17,31 @@ const json = (body: unknown, status = 200) => NextResponse.json(body, { status }
 const clean = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const LINK_COLUMNS = 'id, token, recipient_name, recipient_company, recipient_email, hidden_sections, expires_at, max_views, failed_attempts, revoked_at, created_at, created_by';
 
-type View = { link_id: string; viewed_at: string; ip_hash: string | null; user_agent: string | null; file: string | null };
-
-/** Every logged view, newest first. Supabase hands out at most 1000 rows per request, so this asks until a page is empty. */
-async function allViews(supabase: ReturnType<typeof createClient>) {
-  const rows: View[] = [];
-  for (;;) {
-    const { data, error } = await supabase
-      .from('share_link_views')
-      .select('link_id, viewed_at, ip_hash, user_agent, file')
-      .order('viewed_at', { ascending: false })
-      .order('id', { ascending: false })
-      .range(rows.length, rows.length + 999);
-    if (error || !data.length) return { rows, error };
-    rows.push(...data);
-  }
-}
-
 export async function GET(request: NextRequest) {
   const session = await getSessionInfo().catch(() => null);
   if (!session?.owner) return json({ error: NO_ACCESS }, 403);
-  const supabase = createClient();
   const [links, views] = await Promise.all([
-    supabase.from('share_links').select(LINK_COLUMNS).order('created_at', { ascending: false }),
-    allViews(supabase),
+    createClient().from('share_links').select(LINK_COLUMNS).order('created_at', { ascending: false }),
+    loadViews(),
   ]);
   if (links.error) return json({ error: links.error.message }, 500);
   if (views.error) return json({ error: views.error.message }, 500);
-  const byLink = new Map<string, View[]>();
+  const byLink = new Map<string, ViewRow[]>();
   for (const v of views.rows) byLink.set(v.link_id, [...(byLink.get(v.link_id) ?? []), v]);
   return json({
     links: (links.data ?? []).map(({ token, ...link }) => {
       const seen = byLink.get(link.id) ?? [];
-      const opened = seen.filter((v) => !v.file);
+      const starts = visitStarts(seen);
+      const listed = seen.filter((v) => v.file || starts.has(v));
       return {
         ...link,
         url: linkUrl(request, token),
-        status: linkStatus(link, opened.length),
-        views: opened.length,
-        documents: seen.length - opened.length,
-        last_viewed: opened[0]?.viewed_at ?? null,
+        status: linkStatus(link, starts.size),
+        views: starts.size,
+        documents: seen.filter((v) => v.file).length,
+        last_active: listed[0]?.viewed_at ?? null,
         devices: new Set(seen.map((v) => v.ip_hash)).size,
-        activity: seen.map((v) => ({
+        activity: listed.map((v) => ({
           viewed_at: v.viewed_at,
           device: deviceName(v.user_agent),
           file: v.file ? docFile(v.file)?.label ?? v.file : null,

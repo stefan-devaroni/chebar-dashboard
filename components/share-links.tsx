@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Copy, Eye, KeyRound, Link2, Power, SlidersHorizontal, Unlock } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Copy, DoorOpen, Eye, KeyRound, Link2, Power, SlidersHorizontal, Unlock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { arubaTime, DEFAULT_HIDDEN, SECTION_CHOICES, STATUS_TEXT, type LinkStatus } from '@/lib/share-sections';
 
@@ -22,9 +22,9 @@ type LinkRow = {
   revoked_at: string | null;
   created_at: string;
   status: LinkStatus;
-  views: number;
+  views: number; // visits: going back to the summary within one doesn't count (visitStarts in lib/share-sections.ts)
   documents: number;
-  last_viewed: string | null;
+  last_active: string | null;
   devices: number;
   activity: { viewed_at: string; device: string; file: string | null }[]; // every opening and document view, newest first
 };
@@ -121,6 +121,7 @@ export function ShareLinks() {
   const [open, setOpen] = useState<string | null>(null);
   const [allActivity, setAllActivity] = useState(false);
   const [editing, setEditing] = useState<{ id: string; hidden: string[] } | null>(null);
+  const [limit, setLimit] = useState<{ id: string; value: string } | null>(null);
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [email, setEmail] = useState('');
@@ -225,6 +226,7 @@ export function ShareLinks() {
       setError(body.error ?? 'That didn’t work.');
     }
     load();
+    return res.ok;
   }
 
   const message = shown?.passcode ? messageFor(shown) : '';
@@ -331,9 +333,9 @@ export function ShareLinks() {
                     {l.recipient_company && <span className="text-neutral-500"> · {l.recipient_company}</span>}
                   </span>
                   <span className="block text-sm text-neutral-500">
-                    {l.views === 0 || !l.last_viewed
+                    {l.views === 0 || !l.last_active
                       ? 'Not opened yet'
-                      : `Opened ${plural(l.views, 'time', 'times')}, last on ${arubaTime(l.last_viewed)}`}
+                      : `Opened ${plural(l.views, 'time', 'times')}, last active ${arubaTime(l.last_active)}`}
                     {l.documents > 0 && ` · ${plural(l.documents, 'document viewed', 'documents viewed')}`}
                     {l.devices > 1 && ` · from ${l.devices} different networks`}
                   </span>
@@ -382,6 +384,13 @@ export function ShareLinks() {
                 >
                   <SlidersHorizontal className="w-4 h-4" /> What they see
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setLimit(limit?.id === l.id ? null : { id: l.id, value: l.max_views ? String(l.max_views) : '' })}
+                  className={smallButton}
+                >
+                  <DoorOpen className="w-4 h-4" /> Max openings
+                </button>
                 {l.activity.length > 0 && (
                   <button
                     type="button"
@@ -412,6 +421,41 @@ export function ShareLinks() {
                     <button type="button" onClick={() => setEditing(null)} className="text-sm px-3 py-2 text-neutral-500">Cancel</button>
                   </div>
                 </div>
+              )}
+              {limit?.id === l.id && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const value = limit.value.trim();
+                    if (await act(l.id, 'max_views', { max_views: value === '' ? null : Number(value) })) setLimit(null);
+                  }}
+                  className="mt-3 rounded-xl border border-neutral-200 p-3 space-y-3"
+                >
+                  <label className="block">
+                    <span className={labelClass}>Max openings</span>
+                    <input
+                      className={cn(inputClass, 'sm:w-40')}
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={1000}
+                      value={limit.value}
+                      onChange={(e) => setLimit({ id: l.id, value: e.target.value })}
+                      placeholder="No limit"
+                      autoFocus
+                    />
+                  </label>
+                  <p className="text-sm text-neutral-500">
+                    Opened {plural(l.views, 'time', 'times')} so far. Going back to the summary from a document doesn’t count, nor does coming
+                    back within an hour. Leave it empty for no limit.
+                  </p>
+                  <div className="flex gap-2">
+                    <button className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl bg-ink text-cream">
+                      <Check className="w-4 h-4" /> Save
+                    </button>
+                    <button type="button" onClick={() => setLimit(null)} className="text-sm px-3 py-2 text-neutral-500">Cancel</button>
+                  </div>
+                </form>
               )}
               {open === l.id && (
                 <>

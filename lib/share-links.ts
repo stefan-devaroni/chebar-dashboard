@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'crypto';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { DOC_KEYS, isSectionKey, pointDocLinks, type LinkStatus } from '@/lib/share-sections';
+import { DOC_KEYS, isSectionKey, linkStatus, pointDocLinks, VISIT_GAP_MS, visitStarts, type LinkStatus } from '@/lib/share-sections';
 
 // Private buyer links for the One Pager (Oct 2026), server side. Each person gets their own link (a random
 // token in the address) and a passcode, checked against a scrypt hash. The passcode itself is also kept encrypted
@@ -121,14 +121,43 @@ export function clientIp(request: NextRequest): string {
   return request.headers.get('x-nf-client-connection-ip') ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '';
 }
 
-/** The link behind a token, and how often its page has been opened (document downloads don't count) */
-export async function loadLink(token: string): Promise<{ link: ShareLink; views: number } | null> {
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+/** The browser's user agent as it's logged, and compared to tell a visit's own clicks from a new opening */
+export const userAgent = (request: NextRequest) => (request.headers.get('user-agent') ?? '').slice(0, 300);
+
+export type ViewRow = { link_id: string; viewed_at: string; ip_hash: string | null; user_agent: string | null; file: string | null };
+
+/**
+ * Logged openings and document views, newest first: every link's, or one link's. Supabase hands out at most 1000 rows
+ * per request, so this asks until a page comes back empty.
+ */
+export async function loadViews(linkId?: string) {
   const supabase = createClient();
-  const { data } = await supabase.from('share_links').select('*').eq('token', token).maybeSingle();
+  const rows: ViewRow[] = [];
+  for (;;) {
+    let query = supabase.from('share_link_views').select('link_id, viewed_at, ip_hash, user_agent, file');
+    if (linkId) query = query.eq('link_id', linkId);
+    const { data, error } = await query
+      .order('viewed_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(rows.length, rows.length + 999);
+    if (error || !data.length) return { rows, error };
+    rows.push(...data);
+  }
+}
+
+/**
+ * The link behind a token and its state for this visitor. Openings are visits (`visitStarts`; documents don't count),
+ * and a visit that's going on may finish after the last allowed opening: back to the summary, more documents.
+ */
+export async function loadLink(token: string, request: NextRequest): Promise<{ link: ShareLink; status: LinkStatus } | null> {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+  const { data } = await createClient().from('share_links').select('*').eq('token', token).maybeSingle();
   if (!data) return null;
-  const { count } = await supabase.from('share_link_views').select('id', { count: 'exact', head: true }).eq('link_id', data.id).is('file', null);
-  return { link: data as ShareLink, views: count ?? 0 };
+  const { rows } = await loadViews(data.id);
+  const status = linkStatus(data, visitStarts(rows).size);
+  const ua = userAgent(request);
+  const visiting = rows.some((v) => (v.user_agent ?? '') === ua && Date.now() - Date.parse(v.viewed_at) <= VISIT_GAP_MS);
+  return { link: data as ShareLink, status: status === 'used' && visiting ? 'active' : status };
 }
 
 const escapeHtml = (s: string) =>

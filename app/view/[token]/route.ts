@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
   buyerHtml, checkPasscode, checkSession, clientIp, CLOSED_TEXT, COOKIE, loadLink as load, networkHash, passcodePage, SANDBOXED_HEADERS,
-  SESSION_HOURS, signSession,
+  SESSION_HOURS, signSession, userAgent,
 } from '@/lib/share-links';
-import { linkStatus, MAX_FAILED } from '@/lib/share-sections';
+import { MAX_FAILED } from '@/lib/share-sections';
 
 // A buyer's private link to the One Pager (Oct 2026): /view/<token>. Public on purpose (the middleware only
 // guards /dashboard and /api); the token, the passcode and the link's state decide what someone sees.
@@ -29,29 +29,28 @@ const page = (html: string, status = 200, headers: Record<string, string> = FORM
 const NOT_FOUND = 'This link doesn’t work. Ask Che Bar for a new one.';
 
 export async function GET(request: NextRequest, { params }: { params: { token: string } }) {
-  const found = await load(params.token);
+  const found = await load(params.token, request);
   if (!found) return page(passcodePage({ closed: NOT_FOUND }), 404);
-  const { link, views } = found;
-  const status = linkStatus(link, views);
+  const { link, status } = found;
   if (status !== 'active') return page(passcodePage({ closed: CLOSED_TEXT[status] }), 410);
   if (!checkSession(request.cookies.get(COOKIE)?.value, link.id, link.secret)) return page(passcodePage());
 
   const supabase = createClient();
   const { data: doc } = await supabase.from('owner_documents').select('html').eq('slug', link.doc_slug).maybeSingle();
   if (!doc) return page(passcodePage({ closed: 'The summary isn’t available right now. Please try again later.' }), 503);
+  // Every load is logged; whether it was a new opening or a way back within a visit is decided when counting
   await supabase.from('share_link_views').insert({
     link_id: link.id,
     ip_hash: networkHash(clientIp(request), link.secret),
-    user_agent: (request.headers.get('user-agent') ?? '').slice(0, 300),
+    user_agent: userAgent(request),
   });
   return page(buyerHtml(doc.html as string, link, new Date()), 200, DOC_HEADERS);
 }
 
 export async function POST(request: NextRequest, { params }: { params: { token: string } }) {
-  const found = await load(params.token);
+  const found = await load(params.token, request);
   if (!found) return page(passcodePage({ closed: NOT_FOUND }), 404);
-  const { link, views } = found;
-  const status = linkStatus(link, views);
+  const { link, status } = found;
   if (status !== 'active') return page(passcodePage({ closed: CLOSED_TEXT[status] }), 410);
 
   const form = await request.formData().catch(() => null);

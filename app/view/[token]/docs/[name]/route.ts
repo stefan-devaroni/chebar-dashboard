@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
-  checkSession, clientIp, COOKIE, docViewerHtml, DOCS_BUCKET, loadLink, markText, networkHash, SANDBOXED_HEADERS, type ViewPage,
+  checkSession, clientIp, COOKIE, docViewerHtml, DOCS_BUCKET, loadLink, markText, networkHash, SANDBOXED_HEADERS, userAgent, type ViewPage,
 } from '@/lib/share-links';
-import { docFile, linkStatus } from '@/lib/share-sections';
+import { docFile } from '@/lib/share-sections';
 
 // A document from the One Pager's Documents section, through one buyer's link (Oct 2026): only with that link's
 // passcode cookie, only while the link works, and only from groups the link shows. It opens as pages to look at,
 // with the person's name across them (Stefan: view, not download), and every look is logged with the openings
-// (share_link_views.file).
+// (share_link_views.file). Looks don't count as openings, and keep the visit going (visitStarts).
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +20,10 @@ const message = (text: string, status: number) =>
 
 export async function GET(request: NextRequest, { params }: { params: { token: string; name: string } }) {
   const file = docFile(params.name);
-  const found = file ? await loadLink(params.token) : null;
+  const found = file ? await loadLink(params.token, request) : null;
   if (!file || !found) return message('This document isn’t available.', 404);
-  const { link, views } = found;
-  if (linkStatus(link, views) !== 'active') return message('This link no longer works. Ask Che Bar for a new one.', 410);
+  const { link, status } = found;
+  if (status !== 'active') return message('This link no longer works. Ask Che Bar for a new one.', 410);
   // Without the cookie (or after 12 hours): back to the passcode page
   if (!checkSession(request.cookies.get(COOKIE)?.value, link.id, link.secret)) {
     return new NextResponse(null, { status: 303, headers: { Location: `/view/${params.token}`, 'Cache-Control': 'no-store' } });
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: { token: s
     link_id: link.id,
     viewed_at: now.toISOString(),
     ip_hash: networkHash(clientIp(request), link.secret),
-    user_agent: (request.headers.get('user-agent') ?? '').slice(0, 300),
+    user_agent: userAgent(request),
     file: params.name,
   });
   return new NextResponse(docViewerHtml({ title: file.label, pages, back: `/view/${params.token}`, text: markText(link, now) }), {

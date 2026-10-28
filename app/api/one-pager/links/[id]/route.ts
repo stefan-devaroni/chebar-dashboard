@@ -6,7 +6,8 @@ import { hashPasscode, linkUrl, newPasscode, openPasscode, sealPasscode } from '
 import { isSectionKey } from '@/lib/share-sections';
 
 // One buyer link, for owners: its address and passcode to copy again (GET), or a change (PATCH): switch it off or
-// back on, unlock it after wrong passcodes, move its last day, change what it shows, or give it a new passcode.
+// back on, unlock it after wrong passcodes, move its last day, change what it shows or how often it may be opened,
+// or give it a new passcode.
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +27,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   return json({ id: data.id, url: linkUrl(request, data.token), passcode: openPasscode(data.passcode_enc), expires_at: data.expires_at });
 }
 
-// { action: 'off' | 'on' | 'unlock' | 'passcode' }, { action: 'extend', expires: 'YYYY-MM-DD' } or
-// { action: 'sections', hidden: section keys }. A new passcode replaces the old one (which stops working) and comes back.
+// { action: 'off' | 'on' | 'unlock' | 'passcode' }, { action: 'extend', expires: 'YYYY-MM-DD' },
+// { action: 'sections', hidden: section keys } or { action: 'max_views', max_views: 1–1000 or null for no limit }.
+// A new passcode replaces the old one (which stops working) and comes back. A used-up link works again once its
+// limit is above its openings.
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSessionInfo().catch(() => null);
   if (!session?.owner) return json({ error: NO_ACCESS }, 403);
@@ -41,6 +44,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     passcode = newPasscode();
     change = { passcode_hash: hashPasscode(passcode), passcode_enc: sealPasscode(passcode), failed_attempts: 0 };
   } else if (body.action === 'sections' && Array.isArray(body.hidden)) change = { hidden_sections: Array.from(new Set(body.hidden.filter(isSectionKey))) };
+  else if (body.action === 'max_views') {
+    const max = body.max_views ?? null;
+    if (max !== null && !(Number.isInteger(max) && max >= 1 && max <= 1000)) return json({ error: 'Openings must be a number from 1 to 1000, or empty.' }, 400);
+    change = { max_views: max };
+  }
   else if (body.action === 'extend' && typeof body.expires === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.expires)) {
     const expires = new Date(`${body.expires}T23:59:59-04:00`);
     const days = (expires.getTime() - Date.now()) / 86_400_000;
