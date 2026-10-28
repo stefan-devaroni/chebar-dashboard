@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionInfo } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { NO_ACCESS } from '@/lib/permissions';
-import { hashPasscode, newPasscode, newSecret, newToken } from '@/lib/share-links';
+import { hashPasscode, newPasscode, newSecret, newToken, PUBLIC_ORIGIN } from '@/lib/share-links';
 import { DEFAULT_HIDDEN, deviceName, isSectionKey, linkStatus } from '@/lib/share-sections';
 
 // Owners make and list the private buyer links for the One Pager (owners only; the middleware checks too).
@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status });
 const clean = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const LINK_COLUMNS = 'id, token, recipient_name, recipient_company, recipient_email, hidden_sections, expires_at, max_views, failed_attempts, revoked_at, created_at, created_by';
+const linkOrigin = (request: NextRequest) => (process.env.NODE_ENV === 'production' ? PUBLIC_ORIGIN : new URL(request.url).origin);
 
 export async function GET(request: NextRequest) {
   const session = await getSessionInfo().catch(() => null);
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
     supabase.from('share_link_views').select('link_id, viewed_at, ip_hash, user_agent').order('viewed_at', { ascending: false }).limit(5000),
   ]);
   if (links.error) return json({ error: links.error.message }, 500);
-  const origin = new URL(request.url).origin;
+  const origin = linkOrigin(request);
   const byLink = new Map<string, { viewed_at: string; ip_hash: string | null; user_agent: string | null }[]>();
   for (const v of views.data ?? []) byLink.set(v.link_id, [...(byLink.get(v.link_id) ?? []), v]);
   return json({
@@ -77,5 +78,5 @@ export async function POST(request: NextRequest) {
     .select('id, expires_at')
     .single();
   if (error) return json({ error: error.message }, 500);
-  return json({ id: data.id, url: `${new URL(request.url).origin}/view/${token}`, passcode, expires_at: data.expires_at });
+  return json({ id: data.id, url: `${linkOrigin(request)}/view/${token}`, passcode, expires_at: data.expires_at });
 }

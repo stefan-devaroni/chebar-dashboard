@@ -9,6 +9,8 @@ import { isSectionKey, type LinkStatus } from '@/lib/share-sections';
 
 export const SESSION_HOURS = 12;
 export const COOKIE = 'cb_view';
+// Links handed out always use the public address: on Netlify a request's own URL is the deploy's internal one
+export const PUBLIC_ORIGIN = 'https://dashboard.chebararuba.com';
 
 const PASSCODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
 

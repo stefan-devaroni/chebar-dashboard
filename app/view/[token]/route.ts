@@ -82,7 +82,8 @@ export async function POST(request: NextRequest, { params }: { params: { token: 
   }
   if (link.failed_attempts) await supabase.from('share_links').update({ failed_attempts: 0 }).eq('id', link.id);
 
-  const response = NextResponse.redirect(new URL(`/view/${params.token}`, request.url), 303);
+  // A relative address keeps the visitor on the domain they came in on (where the cookie belongs)
+  const response = new NextResponse(null, { status: 303, headers: { Location: `/view/${params.token}`, 'Cache-Control': 'no-store' } });
   response.cookies.set(COOKIE, signSession(link.id, link.secret), {
     httpOnly: true,
     secure: true,
