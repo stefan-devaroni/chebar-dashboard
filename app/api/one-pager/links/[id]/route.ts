@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionInfo } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { NO_ACCESS } from '@/lib/permissions';
+import { isSectionKey } from '@/lib/share-sections';
 
-// Owners switch a buyer link off or back on, unlock it after wrong passcodes, or move its last day.
+// Owners switch a buyer link off or back on, unlock it after wrong passcodes, move its last day, or change what
+// it shows (also the documents someone can download).
 
 export const dynamic = 'force-dynamic';
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status });
 
-// { action: 'off' | 'on' | 'unlock' } or { action: 'extend', expires: 'YYYY-MM-DD' }
+// { action: 'off' | 'on' | 'unlock' }, { action: 'extend', expires: 'YYYY-MM-DD' } or { action: 'sections', hidden: section keys }
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSessionInfo().catch(() => null);
   if (!session?.owner) return json({ error: NO_ACCESS }, 403);
@@ -18,6 +20,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (body.action === 'off') change = { revoked_at: new Date().toISOString() };
   else if (body.action === 'on') change = { revoked_at: null };
   else if (body.action === 'unlock') change = { failed_attempts: 0 };
+  else if (body.action === 'sections' && Array.isArray(body.hidden)) change = { hidden_sections: Array.from(new Set(body.hidden.filter(isSectionKey))) };
   else if (body.action === 'extend' && typeof body.expires === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.expires)) {
     const expires = new Date(`${body.expires}T23:59:59-04:00`);
     const days = (expires.getTime() - Date.now()) / 86_400_000;

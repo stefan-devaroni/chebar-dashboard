@@ -3,10 +3,11 @@ import { getSessionInfo } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { NO_ACCESS } from '@/lib/permissions';
 import { hashPasscode, newPasscode, newSecret, newToken, PUBLIC_ORIGIN } from '@/lib/share-links';
-import { DEFAULT_HIDDEN, deviceName, isSectionKey, linkStatus } from '@/lib/share-sections';
+import { DEFAULT_HIDDEN, deviceName, docFile, isSectionKey, linkStatus } from '@/lib/share-sections';
 
 // Owners make and list the private buyer links for the One Pager (owners only; the middleware checks too).
-// The passcode is returned once, when a link is made, and only its hash is stored.
+// The passcode is returned once, when a link is made, and only its hash is stored. The list shows each link's
+// openings and document downloads (share_link_views rows with a file).
 
 export const dynamic = 'force-dynamic';
 
@@ -21,23 +22,29 @@ export async function GET(request: NextRequest) {
   const supabase = createClient();
   const [links, views] = await Promise.all([
     supabase.from('share_links').select(LINK_COLUMNS).order('created_at', { ascending: false }),
-    supabase.from('share_link_views').select('link_id, viewed_at, ip_hash, user_agent').order('viewed_at', { ascending: false }).limit(5000),
+    supabase.from('share_link_views').select('link_id, viewed_at, ip_hash, user_agent, file').order('viewed_at', { ascending: false }).limit(5000),
   ]);
   if (links.error) return json({ error: links.error.message }, 500);
   const origin = linkOrigin(request);
-  const byLink = new Map<string, { viewed_at: string; ip_hash: string | null; user_agent: string | null }[]>();
+  const byLink = new Map<string, { viewed_at: string; ip_hash: string | null; user_agent: string | null; file: string | null }[]>();
   for (const v of views.data ?? []) byLink.set(v.link_id, [...(byLink.get(v.link_id) ?? []), v]);
   return json({
     links: (links.data ?? []).map(({ token, ...link }) => {
       const seen = byLink.get(link.id) ?? [];
+      const opened = seen.filter((v) => !v.file);
       return {
         ...link,
         url: `${origin}/view/${token}`,
-        status: linkStatus(link, seen.length),
-        views: seen.length,
-        last_viewed: seen[0]?.viewed_at ?? null,
+        status: linkStatus(link, opened.length),
+        views: opened.length,
+        downloads: seen.length - opened.length,
+        last_viewed: opened[0]?.viewed_at ?? null,
         devices: new Set(seen.map((v) => v.ip_hash)).size,
-        recent: seen.slice(0, 25).map((v) => ({ viewed_at: v.viewed_at, device: deviceName(v.user_agent) })),
+        recent: seen.slice(0, 40).map((v) => ({
+          viewed_at: v.viewed_at,
+          device: deviceName(v.user_agent),
+          file: v.file ? docFile(v.file)?.label ?? v.file : null,
+        })),
       };
     }),
   });

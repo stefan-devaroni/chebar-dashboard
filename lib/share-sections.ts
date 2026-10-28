@@ -1,8 +1,11 @@
 // Private buyer links for the One Pager (Oct 2026): the parts both the browser and the server need.
 // The passcode and cookie logic lives in lib/share-links.ts (server only).
 
-/** The One Pager's sections (its data-section names), in page order; `on` = shown by default */
-export const SECTION_CHOICES: { key: string; label: string; on: boolean }[] = [
+type SectionChoice = { key: string; label: string; on: boolean; doc?: { prefix: string; name: string } };
+
+/** The One Pager's sections (its data-section names), in page order; `on` = shown by default. `doc` marks a group
+ *  in the Documents section: its PDFs in the private bucket one-pager-docs are named <prefix><yyyy>[-mm[-dd]].pdf */
+export const SECTION_CHOICES: SectionChoice[] = [
   { key: 'photos', label: 'Photos', on: true },
   { key: 'keys', label: 'Key numbers', on: true },
   { key: 'sales', label: 'Monthly sales', on: true },
@@ -14,14 +17,37 @@ export const SECTION_CHOICES: { key: string; label: string; on: boolean }[] = [
   { key: 'assets', label: 'What comes with it', on: true },
   { key: 'growth', label: 'Room for growth', on: true },
   { key: 'offer', label: 'The offer', on: false },
+  { key: 'doc-tax', label: 'Tax returns', on: true, doc: { prefix: 'tax-return-', name: 'Tax return' } },
+  { key: 'doc-bank', label: 'Bank statements', on: true, doc: { prefix: 'bank-statement-', name: 'Bank statement' } },
+  { key: 'doc-payroll', label: 'Payslips', on: true, doc: { prefix: 'payslips-', name: 'Payslips' } },
+  { key: 'doc-kvk', label: 'KvK extract', on: true, doc: { prefix: 'kvk-extract-', name: 'KvK extract' } },
   { key: 'later', label: 'Next stage', on: true },
 ];
 
 export const DEFAULT_HIDDEN = SECTION_CHOICES.filter((s) => !s.on).map((s) => s.key);
+export const DOC_KEYS = SECTION_CHOICES.filter((s) => s.doc).map((s) => s.key);
 
 export function isSectionKey(key: unknown): key is string {
   return typeof key === 'string' && SECTION_CHOICES.some((s) => s.key === key);
 }
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** The group a One Pager document belongs to and its name, e.g. tax-return-2026-04.pdf → "Tax return April 2026" */
+export function docFile(file: string): { key: string; label: string } | null {
+  for (const s of SECTION_CHOICES) {
+    if (!s.doc || !file.startsWith(s.doc.prefix)) continue;
+    const m = /^(\d{4})(?:-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?)?\.pdf$/.exec(file.slice(s.doc.prefix.length));
+    if (!m) return null;
+    const [, year, month, day] = m;
+    const when = month ? `${day ? `${Number(day)} ` : ''}${MONTHS[Number(month) - 1]} ${year}` : year;
+    return { key: s.key, label: `${s.doc.name} ${when}` };
+  }
+  return null;
+}
+
+/** Point the One Pager's document links (href="docs/…", which work next to the local file) at the server */
+export const pointDocLinks = (html: string, base: string) => html.replace(/href="docs\//g, `href="${base}`);
 
 /** Wrong passcodes before a link locks itself (an owner can unlock it) */
 export const MAX_FAILED = 10;

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Check, Copy, Eye, Link2, Power, Unlock } from 'lucide-react';
+import { Check, Copy, Eye, Link2, Power, SlidersHorizontal, Unlock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { arubaTime, DEFAULT_HIDDEN, SECTION_CHOICES, STATUS_TEXT, type LinkStatus } from '@/lib/share-sections';
 
-// One Pager tab: owners make a private link per buyer, see when each was opened, and switch links off.
+// One Pager tab: owners make a private link per buyer, see when each was opened and what was downloaded,
+// change what a link shows, and switch links off.
 
 type LinkRow = {
   id: string;
@@ -21,9 +22,10 @@ type LinkRow = {
   created_at: string;
   status: LinkStatus;
   views: number;
+  downloads: number;
   last_viewed: string | null;
   devices: number;
-  recent: { viewed_at: string; device: string }[];
+  recent: { viewed_at: string; device: string; file: string | null }[];
 };
 type Made = { name: string; url: string; passcode: string; expires_at: string };
 
@@ -64,12 +66,48 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
+/** What a link shows: the page's parts, then the document groups buyers can download */
+function SectionChips({ hidden, onChange }: { hidden: string[]; onChange: (hidden: string[]) => void }) {
+  const groups = [
+    { title: 'On the page', choices: SECTION_CHOICES.filter((s) => !s.doc) },
+    { title: 'Documents to download', choices: SECTION_CHOICES.filter((s) => s.doc) },
+  ];
+  return (
+    <div className="space-y-3">
+      {groups.map((g) => (
+        <div key={g.title}>
+          <p className="text-xs text-neutral-500 mb-1.5">{g.title}</p>
+          <div className="flex flex-wrap gap-2">
+            {g.choices.map((s) => {
+              const on = !hidden.includes(s.key);
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => onChange(on ? [...hidden, s.key] : hidden.filter((k) => k !== s.key))}
+                  className={cn('text-sm px-3 py-1.5 rounded-full border', on ? 'bg-ink text-cream border-ink' : 'bg-white text-neutral-500 border-neutral-300')}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
 export function ShareLinks() {
   const [links, setLinks] = useState<LinkRow[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<Made | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; hidden: string[] } | null>(null);
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [email, setEmail] = useState('');
@@ -112,7 +150,7 @@ export function ShareLinks() {
     load();
   }
 
-  async function act(id: string, action: string, extra: Record<string, string> = {}) {
+  async function act(id: string, action: string, extra: Record<string, unknown> = {}) {
     setError('');
     const res = await fetch(`/api/one-pager/links/${id}`, {
       method: 'PATCH',
@@ -136,8 +174,8 @@ export function ShareLinks() {
       <header className="mb-4">
         <h2 className="font-display text-2xl">Buyer links</h2>
         <p className="text-sm text-neutral-500 mt-1">
-          A private link and passcode for each person. Their name is printed across every screen, printing is blocked, and you see each time
-          they open it.
+          A private link and passcode for each person. Their name is printed across every screen and on every page of the documents they
+          download, printing is blocked, and you see each time they open it or download something.
         </p>
       </header>
 
@@ -186,22 +224,7 @@ export function ShareLinks() {
         </div>
         <fieldset>
           <legend className={labelClass}>What they see</legend>
-          <div className="flex flex-wrap gap-2">
-            {SECTION_CHOICES.map((s) => {
-              const on = !hidden.includes(s.key);
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setHidden(on ? [...hidden, s.key] : hidden.filter((k) => k !== s.key))}
-                  className={cn('text-sm px-3 py-1.5 rounded-full border', on ? 'bg-ink text-cream border-ink' : 'bg-white text-neutral-500 border-neutral-300')}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
+          <SectionChips hidden={hidden} onChange={setHidden} />
         </fieldset>
         <button disabled={busy} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-ink text-cream px-5 py-3 rounded-xl text-base font-medium disabled:opacity-50">
           <Link2 className="w-4 h-4" />
@@ -228,13 +251,19 @@ export function ShareLinks() {
                   <p className="text-sm text-neutral-500">
                     {l.views === 0 || !l.last_viewed
                       ? 'Not opened yet'
-                      : `Opened ${l.views} ${l.views === 1 ? 'time' : 'times'}, last on ${arubaTime(l.last_viewed)}`}
+                      : `Opened ${plural(l.views, 'time', 'times')}, last on ${arubaTime(l.last_viewed)}`}
+                    {l.downloads > 0 && ` · ${plural(l.downloads, 'download', 'downloads')}`}
                     {l.devices > 1 && ` · from ${l.devices} different networks`}
                   </p>
                   <p className="text-sm text-neutral-500">
                     Works until {arubaDay(l.expires_at)}
-                    {l.max_views ? ` · ${l.max_views} ${l.max_views === 1 ? 'opening' : 'openings'} at most` : ''}
+                    {l.max_views ? ` · ${plural(l.max_views, 'opening', 'openings')} at most` : ''}
                   </p>
+                  {l.hidden_sections.length > 0 && (
+                    <p className="text-sm text-neutral-500">
+                      Not shown: {SECTION_CHOICES.filter((s) => l.hidden_sections.includes(s.key)).map((s) => s.label).join(', ')}
+                    </p>
+                  )}
                 </div>
                 <span className={cn('text-xs px-2.5 py-1 rounded-full border', STATUS_STYLE[l.status])}>{STATUS_TEXT[l.status]}</span>
               </div>
@@ -261,17 +290,45 @@ export function ShareLinks() {
                 >
                   + 2 weeks
                 </button>
-                {l.views > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(editing?.id === l.id ? null : { id: l.id, hidden: l.hidden_sections })}
+                  className={smallButton}
+                >
+                  <SlidersHorizontal className="w-4 h-4" /> What they see
+                </button>
+                {l.recent.length > 0 && (
                   <button type="button" onClick={() => setOpen(open === l.id ? null : l.id)} className={smallButton}>
-                    <Eye className="w-4 h-4" /> {open === l.id ? 'Hide openings' : 'Openings'}
+                    <Eye className="w-4 h-4" /> {open === l.id ? 'Hide activity' : 'Activity'}
                   </button>
                 )}
               </div>
+              {editing?.id === l.id && (
+                <div className="mt-3 rounded-xl border border-neutral-200 p-3 space-y-3">
+                  <SectionChips hidden={editing.hidden} onChange={(hidden) => setEditing({ id: l.id, hidden })} />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await act(l.id, 'sections', { hidden: editing.hidden });
+                        setEditing(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl bg-ink text-cream"
+                    >
+                      <Check className="w-4 h-4" /> Save
+                    </button>
+                    <button type="button" onClick={() => setEditing(null)} className="text-sm px-3 py-2 text-neutral-500">Cancel</button>
+                  </div>
+                </div>
+              )}
               {open === l.id && (
                 <ul className="mt-3 text-sm divide-y divide-neutral-100">
                   {l.recent.map((v, i) => (
                     <li key={i} className="py-1.5 flex justify-between gap-3">
-                      <span>{arubaTime(v.viewed_at)}</span>
+                      <span>
+                        {arubaTime(v.viewed_at)}
+                        <span className="text-neutral-500"> · {v.file ? `downloaded ${v.file}` : 'opened'}</span>
+                      </span>
                       <span className="text-neutral-500 text-right">{v.device}</span>
                     </li>
                   ))}

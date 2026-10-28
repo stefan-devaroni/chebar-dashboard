@@ -1,16 +1,21 @@
 import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'crypto';
-import { isSectionKey, type LinkStatus } from '@/lib/share-sections';
+import type { NextRequest } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { DOC_KEYS, isSectionKey, pointDocLinks, type LinkStatus } from '@/lib/share-sections';
 
 // Private buyer links for the One Pager (Oct 2026), server side. Each person gets their own link (a random
 // token in the address) and a passcode, which is only stored as a scrypt hash and shown once, to the owner who
 // made the link. A correct passcode gives a cookie for that link only (12 hours), signed with the link's own
-// secret. Every opening is logged. The page they see carries their name across every screen, has no print or
-// download, and stops working when the link expires, is switched off, runs out of openings or gets locked.
+// secret. Every opening and every document download is logged. The page they see carries their name across
+// every screen, has no print, and stops working when the link expires, is switched off, runs out of openings
+// or gets locked. Documents they download carry their name on every page (lib/pdf-stamp.ts).
 
 export const SESSION_HOURS = 12;
 export const COOKIE = 'cb_view';
 // Links handed out always use the public address: on Netlify a request's own URL is the deploy's internal one
 export const PUBLIC_ORIGIN = 'https://dashboard.chebararuba.com';
+/** Private Storage bucket with the One Pager's documents (supabase/one-pager-docs.sql) */
+export const DOCS_BUCKET = 'one-pager-docs';
 
 const PASSCODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
 
@@ -77,19 +82,51 @@ export function networkHash(ip: string, secret: string): string {
   return createHash('sha256').update(`${ip}|${secret}`).digest('base64url').slice(0, 12);
 }
 
+export function clientIp(request: NextRequest): string {
+  return request.headers.get('x-nf-client-connection-ip') ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '';
+}
+
+/** The link behind a token, and how often its page has been opened (document downloads don't count) */
+export async function loadLink(token: string): Promise<{ link: ShareLink; views: number } | null> {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+  const supabase = createClient();
+  const { data } = await supabase.from('share_links').select('*').eq('token', token).maybeSingle();
+  if (!data) return null;
+  const { count } = await supabase.from('share_link_views').select('id', { count: 'exact', head: true }).eq('link_id', data.id).is('file', null);
+  return { link: data as ShareLink, views: count ?? 0 };
+}
+
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 
-/** The One Pager as one buyer sees it: their sections only, their name across every screen, no print */
-export function buyerHtml(doc: string, link: Pick<ShareLink, 'recipient_name' | 'recipient_company' | 'hidden_sections'>, viewedAt: Date): string {
+/** The marks that name the person: across the page or document, and along the bottom */
+export function markText(link: Pick<ShareLink, 'recipient_name' | 'recipient_company'>, at: Date): { mark: string; ribbon: string } {
   const who = [link.recipient_name, link.recipient_company].filter(Boolean).join(' · ');
-  const day = viewedAt.toLocaleDateString('en-US', { timeZone: 'America/Aruba', month: 'short', day: 'numeric', year: 'numeric' });
-  const mark = escapeHtml(`CONFIDENTIAL · ${who} · ${day}`);
+  const day = at.toLocaleDateString('en-US', { timeZone: 'America/Aruba', month: 'short', day: 'numeric', year: 'numeric' });
+  return { mark: `CONFIDENTIAL · ${who} · ${day}`, ribbon: `Confidential · prepared for ${who} · please do not share or forward` };
+}
+
+/** The sections a link leaves out; the Documents section goes when all its groups do */
+function hiddenKeys(link: Pick<ShareLink, 'hidden_sections'>): string[] {
+  const keys = link.hidden_sections.filter(isSectionKey);
+  return DOC_KEYS.every((k) => keys.includes(k)) ? [...keys, 'documents'] : keys;
+}
+
+/** The One Pager as one buyer sees it: their sections only (taken out of the page, not just hidden), their name
+ *  across every screen, no print, and document links that go through their own link */
+export function buyerHtml(
+  doc: string,
+  link: Pick<ShareLink, 'token' | 'recipient_name' | 'recipient_company' | 'hidden_sections'>,
+  viewedAt: Date
+): string {
+  const text = markText(link, viewedAt);
+  const mark = escapeHtml(text.mark);
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="280"><g transform="rotate(-24 280 140)" ' +
     'font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="600">' +
     `<text x="31" y="151" fill="rgba(0,0,0,0.16)">${mark}</text><text x="30" y="150" fill="rgba(255,255,255,0.16)">${mark}</text></g></svg>`;
-  const hidden = link.hidden_sections.filter(isSectionKey).map((k) => `[data-section="${k}"]`);
+  const keys = hiddenKeys(link);
+  const hidden = keys.map((k) => `[data-section="${k}"]`);
   const style =
     '<style>' +
     (hidden.length ? `${hidden.join(',')}{display:none!important}` : '') +
@@ -99,11 +136,13 @@ export function buyerHtml(doc: string, link: Pick<ShareLink, 'recipient_name' | 
     'body{padding-bottom:40px;-webkit-user-select:none;user-select:none}' +
     '@media print{html,body{display:none!important}}' +
     '</style>';
-  const overlay =
-    '<div class="share-mark" aria-hidden="true"></div>' +
-    `<div class="share-ribbon">Confidential · prepared for ${escapeHtml(who)} · please do not share or forward</div>`;
-  return doc
-    .replace(/<!--controls-->[\s\S]*?<!--\/controls-->/, '')
+  const overlay = `<div class="share-mark" aria-hidden="true"></div><div class="share-ribbon">${escapeHtml(text.ribbon)}</div>`;
+  // Sections sit between <!--section:key--> markers (build_summary.py); the CSS above covers any without them
+  const page = keys.reduce(
+    (html, k) => html.replace(new RegExp(`<!--section:${k}-->[\\s\\S]*?<!--/section:${k}-->`, 'g'), ''),
+    doc.replace(/<!--controls-->[\s\S]*?<!--\/controls-->/, '')
+  );
+  return pointDocLinks(page, `/view/${link.token}/docs/`)
     .replace('</head>', `${style}</head>`)
     .replace('</body>', `${overlay}</body>`);
 }

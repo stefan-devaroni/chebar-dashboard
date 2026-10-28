@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { buyerHtml, checkPasscode, checkSession, CLOSED_TEXT, COOKIE, networkHash, passcodePage, SESSION_HOURS, signSession, type ShareLink } from '@/lib/share-links';
+import {
+  buyerHtml, checkPasscode, checkSession, clientIp, CLOSED_TEXT, COOKIE, loadLink as load, networkHash, passcodePage, SESSION_HOURS, signSession,
+} from '@/lib/share-links';
 import { linkStatus, MAX_FAILED } from '@/lib/share-sections';
 
 // A buyer's private link to the One Pager (Oct 2026): /view/<token>. Public on purpose (the middleware only
@@ -18,28 +20,16 @@ const FORM_HEADERS = {
   ...BASE_HEADERS,
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 };
-// The summary runs as a sandboxed document: its own script works (motion), nothing else of the site is reachable
+// The summary runs as a sandboxed document: its own script works (motion) and its document links download
+// (docs/[name]/route.ts), nothing else of the site is reachable
 const DOC_HEADERS = {
   ...BASE_HEADERS,
   'Content-Security-Policy':
-    "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'",
+    "sandbox allow-scripts allow-downloads; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'",
 };
 
 const page = (html: string, status = 200, headers: Record<string, string> = FORM_HEADERS) => new NextResponse(html, { status, headers });
 const NOT_FOUND = 'This link doesn’t work. Ask Che Bar for a new one.';
-
-async function load(token: string) {
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-  const supabase = createClient();
-  const { data } = await supabase.from('share_links').select('*').eq('token', token).maybeSingle();
-  if (!data) return null;
-  const { count } = await supabase.from('share_link_views').select('id', { count: 'exact', head: true }).eq('link_id', data.id);
-  return { link: data as ShareLink, views: count ?? 0 };
-}
-
-function clientIp(request: NextRequest): string {
-  return request.headers.get('x-nf-client-connection-ip') ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '';
-}
 
 export async function GET(request: NextRequest, { params }: { params: { token: string } }) {
   const found = await load(params.token);
