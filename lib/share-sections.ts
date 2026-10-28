@@ -33,7 +33,6 @@ export const SECTION_CHOICES: SectionChoice[] = [
       { prefix: 'gas-certificate-', name: 'Gas safety certificate' },
     ],
   },
-  { key: 'later', label: 'Next stage', on: true },
 ];
 
 export const DEFAULT_HIDDEN = SECTION_CHOICES.filter((s) => !s.on).map((s) => s.key);
