@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Check, Copy, Eye, Link2, Power, SlidersHorizontal, Unlock } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Copy, Eye, KeyRound, Link2, Power, SlidersHorizontal, Unlock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { arubaTime, DEFAULT_HIDDEN, SECTION_CHOICES, STATUS_TEXT, type LinkStatus } from '@/lib/share-sections';
 
 // One Pager tab: owners make a private link per buyer, see when each was opened and which documents were viewed,
-// change what a link shows, and switch links off.
+// change what a link shows, and switch links off. Clicking a person shows their link, passcode and message at the
+// top to copy again (Stefan, Oct 28: "whichever one I clicked on last").
 
 type LinkRow = {
   id: string;
@@ -27,7 +28,9 @@ type LinkRow = {
   devices: number;
   recent: { viewed_at: string; device: string; file: string | null }[];
 };
-type Made = { name: string; url: string; passcode: string; expires_at: string };
+// The link shown at the top: the one just made or clicked. No passcode when the link was made before passcodes were
+// kept (Oct 28 2026): it can get a new one.
+type Shown = { id: string; name: string; url: string; passcode: string | null; expires_at: string; isNew: boolean };
 
 const inputClass = 'w-full px-3 py-3 bg-white border border-neutral-200 rounded-xl text-base focus:outline-none focus:border-gold';
 const labelClass = 'block text-xs uppercase tracking-wider text-neutral-500 mb-1.5';
@@ -105,7 +108,8 @@ export function ShareLinks() {
   const [links, setLinks] = useState<LinkRow[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [made, setMade] = useState<Made | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
+  const shownBox = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; hidden: string[] } | null>(null);
   const [name, setName] = useState('');
@@ -125,6 +129,40 @@ export function ShareLinks() {
     load();
   }, []);
 
+  // Bring the box into view whenever another link is shown in it
+  const shownId = shown?.id;
+  useEffect(() => {
+    if (shownId) shownBox.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [shownId]);
+
+  async function show(l: LinkRow) {
+    setError('');
+    const res = await fetch(`/api/one-pager/links/${l.id}`, { cache: 'no-store' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(body.error ?? 'Could not open that link.');
+      return;
+    }
+    setShown({ id: l.id, name: l.recipient_name, url: body.url, passcode: body.passcode, expires_at: body.expires_at, isNew: false });
+  }
+
+  async function newPasscode() {
+    if (!shown || !window.confirm(`Give ${shown.name} a new passcode? The old one stops working.`)) return;
+    setError('');
+    const res = await fetch(`/api/one-pager/links/${shown.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'passcode' }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.passcode) {
+      setError(body.error ?? 'Could not make a new passcode.');
+      return;
+    }
+    setShown({ ...shown, passcode: body.passcode });
+    load();
+  }
+
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -140,7 +178,7 @@ export function ShareLinks() {
       setError(body.error ?? 'Could not make the link.');
       return;
     }
-    setMade({ name: name.trim(), url: body.url, passcode: body.passcode, expires_at: body.expires_at });
+    setShown({ id: body.id, name: name.trim(), url: body.url, passcode: body.passcode, expires_at: body.expires_at, isNew: true });
     setName('');
     setCompany('');
     setEmail('');
@@ -164,9 +202,9 @@ export function ShareLinks() {
     load();
   }
 
-  const message = made
-    ? `Here is the Che Bar business summary, as agreed under the NDA:\n${made.url}\n\nPasscode: ${made.passcode}\n\n` +
-      `The link works until ${arubaDay(made.expires_at)} and is for you only. Please don't share or forward it.`
+  const message = shown?.passcode
+    ? `Here is the Che Bar business summary, as agreed under the NDA:\n${shown.url}\n\nPasscode: ${shown.passcode}\n\n` +
+      `The link works until ${arubaDay(shown.expires_at)} and is for you only. Please don't share or forward it.`
     : '';
 
   return (
@@ -179,19 +217,29 @@ export function ShareLinks() {
         </p>
       </header>
 
-      {made && (
-        <div className="mb-6 rounded-2xl border border-gold/60 bg-gold/10 p-4 space-y-3">
-          <p className="font-medium">Link for {made.name}. Note the passcode now: it is only shown this once.</p>
+      {shown && (
+        <div ref={shownBox} className="mb-6 scroll-mt-4 rounded-2xl border border-gold/60 bg-gold/10 p-4 space-y-3">
+          <p className="font-medium">{shown.isNew ? `New link for ${shown.name}` : shown.name}</p>
           <div className="grid gap-1.5 text-sm">
-            <p className="break-all"><span className="text-neutral-500">Link: </span>{made.url}</p>
-            <p><span className="text-neutral-500">Passcode: </span><span className="font-mono text-lg tracking-widest">{made.passcode}</span></p>
-            <p className="text-neutral-500">Works until {arubaDay(made.expires_at)}</p>
+            <p className="break-all"><span className="text-neutral-500">Link: </span>{shown.url}</p>
+            {shown.passcode ? (
+              <p><span className="text-neutral-500">Passcode: </span><span className="font-mono text-lg tracking-widest">{shown.passcode}</span></p>
+            ) : (
+              <p className="text-neutral-600">
+                This link was made before passcodes were saved, so its passcode can’t be shown. Give it a new one with the button
+                below; the old one then stops working.
+              </p>
+            )}
+            <p className="text-neutral-500">Works until {arubaDay(shown.expires_at)}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <CopyButton text={made.url} label="Copy link" />
-            <CopyButton text={made.passcode} label="Copy passcode" />
-            <CopyButton text={message} label="Copy message" />
-            <button type="button" onClick={() => setMade(null)} className="text-sm px-3 py-2 text-neutral-500">Done</button>
+            <CopyButton text={shown.url} label="Copy link" />
+            {shown.passcode && <CopyButton text={shown.passcode} label="Copy passcode" />}
+            {shown.passcode && <CopyButton text={message} label="Copy message" />}
+            <button type="button" onClick={newPasscode} className={smallButton}>
+              <KeyRound className="w-4 h-4" /> New passcode
+            </button>
+            <button type="button" onClick={() => setShown(null)} className="text-sm px-3 py-2 text-neutral-500">Done</button>
           </div>
           <p className="text-[11px] text-neutral-500 leading-snug">Safest: send the link by email and the passcode separately, by WhatsApp or a call.</p>
         </div>
@@ -241,33 +289,39 @@ export function ShareLinks() {
           <p className="text-sm text-neutral-500">No links yet.</p>
         ) : (
           links.map((l) => (
-            <div key={l.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
+            <div
+              key={l.id}
+              className={cn('rounded-2xl border bg-white p-4', shown?.id === l.id ? 'border-gold ring-1 ring-gold/40' : 'border-neutral-200')}
+            >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium">
+                <button type="button" onClick={() => show(l)} className="group min-w-0 text-left" title="Show the link, passcode and message">
+                  <span className="block font-medium group-hover:underline">
                     {l.recipient_name}
                     {l.recipient_company && <span className="text-neutral-500"> · {l.recipient_company}</span>}
-                  </p>
-                  <p className="text-sm text-neutral-500">
+                  </span>
+                  <span className="block text-sm text-neutral-500">
                     {l.views === 0 || !l.last_viewed
                       ? 'Not opened yet'
                       : `Opened ${plural(l.views, 'time', 'times')}, last on ${arubaTime(l.last_viewed)}`}
                     {l.documents > 0 && ` · ${plural(l.documents, 'document viewed', 'documents viewed')}`}
                     {l.devices > 1 && ` · from ${l.devices} different networks`}
-                  </p>
-                  <p className="text-sm text-neutral-500">
+                  </span>
+                  <span className="block text-sm text-neutral-500">
                     Works until {arubaDay(l.expires_at)}
                     {l.max_views ? ` · ${plural(l.max_views, 'opening', 'openings')} at most` : ''}
-                  </p>
+                  </span>
                   {l.hidden_sections.length > 0 && (
-                    <p className="text-sm text-neutral-500">
+                    <span className="block text-sm text-neutral-500">
                       Not shown: {SECTION_CHOICES.filter((s) => l.hidden_sections.includes(s.key)).map((s) => s.label).join(', ')}
-                    </p>
+                    </span>
                   )}
-                </div>
+                </button>
                 <span className={cn('text-xs px-2.5 py-1 rounded-full border', STATUS_STYLE[l.status])}>{STATUS_TEXT[l.status]}</span>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => show(l)} className={smallButton}>
+                  <KeyRound className="w-4 h-4" /> Link and passcode
+                </button>
                 <CopyButton text={l.url} label="Copy link" />
                 {l.revoked_at ? (
                   <button type="button" onClick={() => act(l.id, 'on')} className={smallButton}>

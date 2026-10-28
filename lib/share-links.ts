@@ -1,12 +1,12 @@
-import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'crypto';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { DOC_KEYS, isSectionKey, pointDocLinks, type LinkStatus } from '@/lib/share-sections';
 
 // Private buyer links for the One Pager (Oct 2026), server side. Each person gets their own link (a random
-// token in the address) and a passcode, which is only stored as a scrypt hash and shown once, to the owner who
-// made the link. A correct passcode gives a cookie for that link only (12 hours), signed with the link's own
-// secret. Every opening and every document they look at is logged. The page they see carries their name across
+// token in the address) and a passcode, checked against a scrypt hash. The passcode itself is also kept encrypted
+// (sealPasscode), so an owner can copy it again later. A correct passcode gives a cookie for that link only
+// (12 hours), signed with the link's own secret. Every opening and every document they look at is logged. The page they see carries their name across
 // every screen, has no print, and stops working when the link expires, is switched off, runs out of openings
 // or gets locked. Documents open as pages to look at (docViewerHtml), with their name across them, never as files.
 
@@ -28,6 +28,7 @@ export type ShareLink = {
   recipient_company: string;
   recipient_email: string | null;
   passcode_hash: string;
+  passcode_enc: string | null;
   hidden_sections: string[];
   expires_at: string;
   max_views: number | null;
@@ -61,6 +62,40 @@ export function checkPasscode(passcode: string, stored: string): boolean {
   if (want.length !== 32) return false;
   const got = scryptSync(normalize(passcode), Buffer.from(salt, 'base64url'), want.length);
   return timingSafeEqual(want, got);
+}
+
+// The passcode, encrypted for the owner to see again (Stefan, Oct 28). The key comes from the server's service key, so
+// the database alone doesn't give it away. If that key ever changes, old passcodes can't be read: the owner gives the
+// link a new one.
+function passcodeKey(): Buffer {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
+  return Buffer.from(hkdfSync('sha256', secret, 'che-bar-share-links', 'passcode v1', 32));
+}
+
+export function sealPasscode(passcode: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', passcodeKey(), iv);
+  const data = Buffer.concat([cipher.update(passcode, 'utf8'), cipher.final()]);
+  return ['v1', iv, data, cipher.getAuthTag()].map((p) => (typeof p === 'string' ? p : p.toString('base64url'))).join(':');
+}
+
+/** The passcode back, or null when the link has none saved (made before Oct 28 2026) or it can't be read */
+export function openPasscode(sealed: string | null): string | null {
+  const [version, iv, data, tag] = (sealed ?? '').split(':');
+  if (version !== 'v1' || !iv || !data || !tag) return null;
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', passcodeKey(), Buffer.from(iv, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([decipher.update(Buffer.from(data, 'base64url')), decipher.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** The address a buyer gets: always the public one in production (on Netlify a request's own URL is internal) */
+export function linkUrl(request: NextRequest, token: string): string {
+  return `${process.env.NODE_ENV === 'production' ? PUBLIC_ORIGIN : new URL(request.url).origin}/view/${token}`;
 }
 
 /** Cookie value: link id, expiry (seconds), and a signature with the link's own secret */

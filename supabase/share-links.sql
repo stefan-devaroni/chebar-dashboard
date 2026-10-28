@@ -34,4 +34,9 @@ alter table share_links enable row level security;
 alter table share_link_views enable row level security;
 revoke all on share_links, share_link_views from anon, authenticated;
 
+-- Oct 28 2026: the passcode itself, encrypted (AES-256-GCM, key derived from the server's service key), so an owner can
+-- copy a link's passcode and message again later (Stefan). Links made before this have none: the owner gives them a
+-- new passcode. passcode_hash still does the checking.
+alter table share_links add column if not exists passcode_enc text;
+
 notify pgrst, 'reload schema';
