@@ -104,9 +104,9 @@ function SectionChips({ hidden, onChange }: { hidden: string[]; onChange: (hidde
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** What the owner sends a buyer: the link, the passcode and the last day */
-const messageFor = (s: { url: string; passcode: string | null; expires_at: string }) =>
-  `Here is the Che Bar business summary, as agreed under the NDA:\n${s.url}\n\nPasscode: ${s.passcode}\n\n` +
+/** What the owner sends a buyer: a greeting with their first name, the link, the passcode and the last day */
+const messageFor = (s: { name: string; url: string; passcode: string | null; expires_at: string }) =>
+  `Hi ${s.name.trim().split(/\s+/)[0]},\n\nHere is the Che Bar business summary, as agreed under the NDA:\n${s.url}\n\nPasscode: ${s.passcode}\n\n` +
   `The link works until ${arubaDay(s.expires_at)} and is for you only. Please don't share or forward it.`;
 
 export function ShareLinks() {
