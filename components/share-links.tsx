@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, Eye, KeyRound, Link2, Power, SlidersHorizontal, Unlock } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Copy, Eye, KeyRound, Link2, Power, SlidersHorizontal, Unlock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { arubaTime, DEFAULT_HIDDEN, SECTION_CHOICES, STATUS_TEXT, type LinkStatus } from '@/lib/share-sections';
 
@@ -26,8 +26,10 @@ type LinkRow = {
   documents: number;
   last_viewed: string | null;
   devices: number;
-  recent: { viewed_at: string; device: string; file: string | null }[];
+  activity: { viewed_at: string; device: string; file: string | null }[]; // every opening and document view, newest first
 };
+// Activity lists the latest few; the rest open with "Show all" (Stefan, Oct 28: "it will become a long list")
+const ACTIVITY_SHOWN = 10;
 // The link shown at the top: the one just made or clicked. No passcode when the link was made before passcodes were
 // kept (Oct 28 2026): it can get a new one.
 type Shown = { id: string; name: string; url: string; passcode: string | null; expires_at: string; isNew: boolean };
@@ -117,6 +119,7 @@ export function ShareLinks() {
   const [shownNote, setShownNote] = useState('');
   const shownBox = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [allActivity, setAllActivity] = useState(false);
   const [editing, setEditing] = useState<{ id: string; hidden: string[] } | null>(null);
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
@@ -379,8 +382,15 @@ export function ShareLinks() {
                 >
                   <SlidersHorizontal className="w-4 h-4" /> What they see
                 </button>
-                {l.recent.length > 0 && (
-                  <button type="button" onClick={() => setOpen(open === l.id ? null : l.id)} className={smallButton}>
+                {l.activity.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(open === l.id ? null : l.id);
+                      setAllActivity(false);
+                    }}
+                    className={smallButton}
+                  >
                     <Eye className="w-4 h-4" /> {open === l.id ? 'Hide activity' : 'Activity'}
                   </button>
                 )}
@@ -404,17 +414,34 @@ export function ShareLinks() {
                 </div>
               )}
               {open === l.id && (
-                <ul className="mt-3 text-sm divide-y divide-neutral-100">
-                  {l.recent.map((v, i) => (
-                    <li key={i} className="py-1.5 flex justify-between gap-3">
-                      <span>
-                        {arubaTime(v.viewed_at)}
-                        <span className="text-neutral-500"> · {v.file ? `viewed ${v.file}` : 'opened'}</span>
-                      </span>
-                      <span className="text-neutral-500 text-right">{v.device}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="mt-3 text-sm divide-y divide-neutral-100">
+                    {(allActivity ? l.activity : l.activity.slice(0, ACTIVITY_SHOWN)).map((v, i) => (
+                      <li key={i} className="py-1.5 flex justify-between gap-3">
+                        <span>
+                          {arubaTime(v.viewed_at)}
+                          <span className="text-neutral-500"> · {v.file ? `viewed ${v.file}` : 'opened'}</span>
+                        </span>
+                        <span className="text-neutral-500 text-right">{v.device}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {l.activity.length > ACTIVITY_SHOWN && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        // Folding a long list back up: keep this button on screen instead of leaving the page far below it
+                        const button = e.currentTarget;
+                        setAllActivity(!allActivity);
+                        if (allActivity) requestAnimationFrame(() => button.scrollIntoView({ block: 'nearest' }));
+                      }}
+                      className={cn(smallButton, 'mt-2')}
+                    >
+                      {allActivity ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {allActivity ? `Show only the latest ${ACTIVITY_SHOWN}` : `Show all ${l.activity.length}`}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           ))
