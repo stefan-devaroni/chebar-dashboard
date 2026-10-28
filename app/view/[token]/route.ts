@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
-  buyerHtml, checkPasscode, checkSession, clientIp, CLOSED_TEXT, COOKIE, loadLink as load, networkHash, passcodePage, SESSION_HOURS, signSession,
+  buyerHtml, checkPasscode, checkSession, clientIp, CLOSED_TEXT, COOKIE, loadLink as load, networkHash, passcodePage, SANDBOXED_HEADERS,
+  SESSION_HOURS, signSession,
 } from '@/lib/share-links';
 import { linkStatus, MAX_FAILED } from '@/lib/share-sections';
 
@@ -20,13 +21,9 @@ const FORM_HEADERS = {
   ...BASE_HEADERS,
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 };
-// The summary runs as a sandboxed document: its own script works (motion) and its document links download
+// The summary runs as a sandboxed document: its own script works (motion) and its document links open the viewer
 // (docs/[name]/route.ts), nothing else of the site is reachable
-const DOC_HEADERS = {
-  ...BASE_HEADERS,
-  'Content-Security-Policy':
-    "sandbox allow-scripts allow-downloads; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'",
-};
+const DOC_HEADERS = SANDBOXED_HEADERS;
 
 const page = (html: string, status = 200, headers: Record<string, string> = FORM_HEADERS) => new NextResponse(html, { status, headers });
 const NOT_FOUND = 'This link doesn’t work. Ask Che Bar for a new one.';

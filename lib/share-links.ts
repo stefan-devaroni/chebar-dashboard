@@ -6,9 +6,9 @@ import { DOC_KEYS, isSectionKey, pointDocLinks, type LinkStatus } from '@/lib/sh
 // Private buyer links for the One Pager (Oct 2026), server side. Each person gets their own link (a random
 // token in the address) and a passcode, which is only stored as a scrypt hash and shown once, to the owner who
 // made the link. A correct passcode gives a cookie for that link only (12 hours), signed with the link's own
-// secret. Every opening and every document download is logged. The page they see carries their name across
+// secret. Every opening and every document they look at is logged. The page they see carries their name across
 // every screen, has no print, and stops working when the link expires, is switched off, runs out of openings
-// or gets locked. Documents they download carry their name on every page (lib/pdf-stamp.ts).
+// or gets locked. Documents open as pages to look at (docViewerHtml), with their name across them, never as files.
 
 export const SESSION_HOURS = 12;
 export const COOKIE = 'cb_view';
@@ -112,6 +112,23 @@ function hiddenKeys(link: Pick<ShareLink, 'hidden_sections'>): string[] {
   return DOC_KEYS.every((k) => keys.includes(k)) ? [...keys, 'documents'] : keys;
 }
 
+/** The person's name across the whole screen (a fixed layer that lets clicks through) and the ribbon at the bottom.
+ *  The text is drawn twice, dark and light, so it shows on the dark summary and on white document pages alike. */
+function markLayers(text: { mark: string; ribbon: string }, dark: string): { css: string; html: string } {
+  const mark = escapeHtml(text.mark);
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="280"><g transform="rotate(-24 280 140)" ' +
+    'font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="600">' +
+    `<text x="31" y="151" fill="${dark}">${mark}</text><text x="30" y="150" fill="rgba(255,255,255,0.16)">${mark}</text></g></svg>`;
+  return {
+    css:
+      `.share-mark{position:fixed;inset:0;z-index:70;pointer-events:none;background-image:url("data:image/svg+xml,${encodeURIComponent(svg)}")}` +
+      '.share-ribbon{position:fixed;left:0;right:0;bottom:0;z-index:71;padding:9px 16px;text-align:center;' +
+      'font:600 12px/1.4 "Segoe UI",system-ui,-apple-system,Arial,sans-serif;letter-spacing:.04em;color:#1b140d;background:rgba(243,205,140,.94)}',
+    html: `<div class="share-mark" aria-hidden="true"></div><div class="share-ribbon">${escapeHtml(text.ribbon)}</div>`,
+  };
+}
+
 /** The One Pager as one buyer sees it: their sections only (taken out of the page, not just hidden), their name
  *  across every screen, no print, and document links that go through their own link */
 export function buyerHtml(
@@ -119,24 +136,16 @@ export function buyerHtml(
   link: Pick<ShareLink, 'token' | 'recipient_name' | 'recipient_company' | 'hidden_sections'>,
   viewedAt: Date
 ): string {
-  const text = markText(link, viewedAt);
-  const mark = escapeHtml(text.mark);
-  const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="280"><g transform="rotate(-24 280 140)" ' +
-    'font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="600">' +
-    `<text x="31" y="151" fill="rgba(0,0,0,0.16)">${mark}</text><text x="30" y="150" fill="rgba(255,255,255,0.16)">${mark}</text></g></svg>`;
+  const layers = markLayers(markText(link, viewedAt), 'rgba(0,0,0,0.16)');
   const keys = hiddenKeys(link);
   const hidden = keys.map((k) => `[data-section="${k}"]`);
   const style =
     '<style>' +
     (hidden.length ? `${hidden.join(',')}{display:none!important}` : '') +
-    `.share-mark{position:fixed;inset:0;z-index:70;pointer-events:none;background-image:url("data:image/svg+xml,${encodeURIComponent(svg)}")}` +
-    '.share-ribbon{position:fixed;left:0;right:0;bottom:0;z-index:71;padding:9px 16px;text-align:center;' +
-    'font:600 12px/1.4 "Segoe UI",system-ui,-apple-system,Arial,sans-serif;letter-spacing:.04em;color:#1b140d;background:rgba(243,205,140,.94)}' +
+    layers.css +
     'body{padding-bottom:40px;-webkit-user-select:none;user-select:none}' +
     '@media print{html,body{display:none!important}}' +
     '</style>';
-  const overlay = `<div class="share-mark" aria-hidden="true"></div><div class="share-ribbon">${escapeHtml(text.ribbon)}</div>`;
   // Sections sit between <!--section:key--> markers (build_summary.py); the CSS above covers any without them
   const page = keys.reduce(
     (html, k) => html.replace(new RegExp(`<!--section:${k}-->[\\s\\S]*?<!--/section:${k}-->`, 'g'), ''),
@@ -144,7 +153,59 @@ export function buyerHtml(
   );
   return pointDocLinks(page, `/view/${link.token}/docs/`)
     .replace('</head>', `${style}</head>`)
-    .replace('</body>', `${overlay}</body>`);
+    .replace('</body>', `${layers.html}</body>`);
+}
+
+/** Headers for the sandboxed pages behind a link (the summary, a document): their own inline script and data:
+ *  images only, so nothing else of the site is reachable from them */
+export const SANDBOXED_HEADERS: Record<string, string> = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Cache-Control': 'private, no-store',
+  'X-Robots-Tag': 'noindex, nofollow, noarchive',
+  'Referrer-Policy': 'no-referrer',
+  'Content-Security-Policy':
+    "sandbox allow-scripts; default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'",
+};
+
+export type ViewPage = { w: number; h: number; src: string };
+
+/** A document to look at, never a file (Stefan, Oct 28: view, not download): its page images inlined (the sandbox
+ *  loads nothing else), no right-click, dragging, long-press saving or printing, and for a buyer their name across
+ *  every page. Screenshots can't be stopped; the name is what makes one traceable. */
+export function docViewerHtml(opts: { title: string; pages: ViewPage[]; back?: string; text?: { mark: string; ribbon: string }; note?: string }): string {
+  const pages = opts.pages.filter((p) => /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(p.src));
+  const layers = opts.text ? markLayers(opts.text, 'rgba(150,32,22,0.2)') : null;
+  const figures = pages
+    .map(
+      (p, i) =>
+        `<figure class="pg"><img src="${p.src}" width="${Math.round(p.w)}" height="${Math.round(p.h)}" alt="Page ${i + 1}" draggable="false" decoding="async">` +
+        `<figcaption>${i + 1} / ${pages.length}</figcaption></figure>`
+    )
+    .join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>Che Bar – ${escapeHtml(opts.title)}</title><style>
+*{box-sizing:border-box}html{background:#12100d}
+body{margin:0;padding-bottom:48px;color:#f1e9dc;font:400 15px/1.5 "Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.bar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;padding:12px 18px;background:rgba(18,16,13,.95);border-bottom:1px solid rgba(243,230,210,.14)}
+.bar a{color:#f3cd8c;font-weight:600;text-decoration:none;white-space:nowrap}
+.bar h1{flex:1;min-width:0;margin:0;font-size:15px;font-weight:600;line-height:1.3;color:#fff7ea;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar span{color:#a69a8a;font-size:13px;white-space:nowrap}
+.note{max-width:980px;margin:14px auto 0;padding:0 14px;color:#a69a8a;font-size:13px}
+.pages{display:grid;gap:16px;max-width:980px;margin:18px auto 30px;padding:0 12px}
+.pg{position:relative;margin:0;overflow:hidden;border-radius:6px;background:#fff;box-shadow:0 18px 50px -24px rgba(0,0,0,.8)}
+.pg img{display:block;width:100%;height:auto;pointer-events:none;-webkit-user-drag:none}
+.pg::after{content:"";position:absolute;inset:0}
+.pg figcaption{position:absolute;right:10px;bottom:8px;z-index:1;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;color:#fff;background:rgba(0,0,0,.5)}
+@media print{html,body{display:none!important}}
+${layers?.css ?? ''}</style></head><body>
+<header class="bar">${opts.back ? `<a href="${escapeHtml(opts.back)}">← Summary</a>` : ''}<h1>${escapeHtml(opts.title)}</h1><span>${pages.length} ${pages.length === 1 ? 'page' : 'pages'}</span></header>
+${opts.note ? `<p class="note">${escapeHtml(opts.note)}</p>` : ''}<main class="pages">${figures}</main>
+${layers?.html ?? ''}<script>
+document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+document.addEventListener('dragstart', function (e) { e.preventDefault(); });
+document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && /^[psc]$/i.test(e.key)) e.preventDefault(); });
+</script></body></html>`;
 }
 
 export const CLOSED_TEXT: Record<Exclude<LinkStatus, 'active'>, string> = {

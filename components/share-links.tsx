@@ -5,7 +5,7 @@ import { Check, Copy, Eye, Link2, Power, SlidersHorizontal, Unlock } from 'lucid
 import { cn } from '@/lib/utils';
 import { arubaTime, DEFAULT_HIDDEN, SECTION_CHOICES, STATUS_TEXT, type LinkStatus } from '@/lib/share-sections';
 
-// One Pager tab: owners make a private link per buyer, see when each was opened and what was downloaded,
+// One Pager tab: owners make a private link per buyer, see when each was opened and which documents were viewed,
 // change what a link shows, and switch links off.
 
 type LinkRow = {
@@ -22,7 +22,7 @@ type LinkRow = {
   created_at: string;
   status: LinkStatus;
   views: number;
-  downloads: number;
+  documents: number;
   last_viewed: string | null;
   devices: number;
   recent: { viewed_at: string; device: string; file: string | null }[];
@@ -70,7 +70,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 function SectionChips({ hidden, onChange }: { hidden: string[]; onChange: (hidden: string[]) => void }) {
   const groups = [
     { title: 'On the page', choices: SECTION_CHOICES.filter((s) => !s.doc) },
-    { title: 'Documents to download', choices: SECTION_CHOICES.filter((s) => s.doc) },
+    { title: 'Documents to view', choices: SECTION_CHOICES.filter((s) => s.doc) },
   ];
   return (
     <div className="space-y-3">
@@ -174,8 +174,8 @@ export function ShareLinks() {
       <header className="mb-4">
         <h2 className="font-display text-2xl">Buyer links</h2>
         <p className="text-sm text-neutral-500 mt-1">
-          A private link and passcode for each person. Their name is printed across every screen and on every page of the documents they
-          download, printing is blocked, and you see each time they open it or download something.
+          A private link and passcode for each person. Their name is printed across every screen, including every page of the documents,
+          which they can view but not download or print. You see each time they open the link or a document.
         </p>
       </header>
 
@@ -252,7 +252,7 @@ export function ShareLinks() {
                     {l.views === 0 || !l.last_viewed
                       ? 'Not opened yet'
                       : `Opened ${plural(l.views, 'time', 'times')}, last on ${arubaTime(l.last_viewed)}`}
-                    {l.downloads > 0 && ` · ${plural(l.downloads, 'download', 'downloads')}`}
+                    {l.documents > 0 && ` · ${plural(l.documents, 'document viewed', 'documents viewed')}`}
                     {l.devices > 1 && ` · from ${l.devices} different networks`}
                   </p>
                   <p className="text-sm text-neutral-500">
@@ -327,7 +327,7 @@ export function ShareLinks() {
                     <li key={i} className="py-1.5 flex justify-between gap-3">
                       <span>
                         {arubaTime(v.viewed_at)}
-                        <span className="text-neutral-500"> · {v.file ? `downloaded ${v.file}` : 'opened'}</span>
+                        <span className="text-neutral-500"> · {v.file ? `viewed ${v.file}` : 'opened'}</span>
                       </span>
                       <span className="text-neutral-500 text-right">{v.device}</span>
                     </li>

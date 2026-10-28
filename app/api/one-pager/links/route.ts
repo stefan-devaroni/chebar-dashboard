@@ -7,7 +7,7 @@ import { DEFAULT_HIDDEN, deviceName, docFile, isSectionKey, linkStatus } from '@
 
 // Owners make and list the private buyer links for the One Pager (owners only; the middleware checks too).
 // The passcode is returned once, when a link is made, and only its hash is stored. The list shows each link's
-// openings and document downloads (share_link_views rows with a file).
+// openings and the documents they looked at (share_link_views rows with a file).
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
         url: `${origin}/view/${token}`,
         status: linkStatus(link, opened.length),
         views: opened.length,
-        downloads: seen.length - opened.length,
+        documents: seen.length - opened.length,
         last_viewed: opened[0]?.viewed_at ?? null,
         devices: new Set(seen.map((v) => v.ip_hash)).size,
         recent: seen.slice(0, 40).map((v) => ({
