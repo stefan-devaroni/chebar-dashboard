@@ -1,12 +1,14 @@
 import { redirect } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 import { getSessionInfo } from '@/lib/roles';
+import { ShareLinks } from '@/components/share-links';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'One Pager', robots: { index: false, follow: false } };
 
 // The business summary for prospective buyers (Oct 2026), owners only. The document comes from
 // /api/one-pager; opened as a full page, its Print / save as PDF button prints just the summary.
+// Below it, owners make private links for buyers (components/share-links.tsx, /view/<token>).
 export default async function OnePagerPage() {
   const session = await getSessionInfo().catch(() => null);
   if (!session?.owner) redirect('/dashboard');
@@ -33,6 +35,7 @@ export default async function OnePagerPage() {
         title="Che Bar business summary"
         className="w-full h-[75vh] rounded-xl border border-neutral-200 bg-white"
       />
+      <ShareLinks />
     </div>
   );
 }
