@@ -104,11 +104,17 @@ function SectionChips({ hidden, onChange }: { hidden: string[]; onChange: (hidde
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** What the owner sends a buyer: the link, the passcode and the last day */
+const messageFor = (s: { url: string; passcode: string | null; expires_at: string }) =>
+  `Here is the Che Bar business summary, as agreed under the NDA:\n${s.url}\n\nPasscode: ${s.passcode}\n\n` +
+  `The link works until ${arubaDay(s.expires_at)} and is for you only. Please don't share or forward it.`;
+
 export function ShareLinks() {
   const [links, setLinks] = useState<LinkRow[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState<Shown | null>(null);
+  const [shownNote, setShownNote] = useState('');
   const shownBox = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; hidden: string[] } | null>(null);
@@ -137,6 +143,7 @@ export function ShareLinks() {
 
   async function show(l: LinkRow) {
     setError('');
+    setShownNote('');
     const res = await fetch(`/api/one-pager/links/${l.id}`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -146,9 +153,15 @@ export function ShareLinks() {
     setShown({ id: l.id, name: l.recipient_name, url: body.url, passcode: body.passcode, expires_at: body.expires_at, isNew: false });
   }
 
-  async function newPasscode() {
-    if (!shown || !window.confirm(`Give ${shown.name} a new passcode? The old one stops working.`)) return;
+  // A new passcode; with copy, also the message straight away (for links whose passcode wasn't saved)
+  async function newPasscode(copy = false) {
+    if (!shown) return;
+    const ask = copy
+      ? `${shown.name}'s passcode wasn't saved, so the message needs a new one. Make a new passcode and copy the message? The old passcode stops working.`
+      : `Give ${shown.name} a new passcode? The old one stops working.`;
+    if (!window.confirm(ask)) return;
     setError('');
+    setShownNote('');
     const res = await fetch(`/api/one-pager/links/${shown.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -159,7 +172,16 @@ export function ShareLinks() {
       setError(body.error ?? 'Could not make a new passcode.');
       return;
     }
-    setShown({ ...shown, passcode: body.passcode });
+    const next = { ...shown, passcode: body.passcode as string };
+    setShown(next);
+    if (copy) {
+      try {
+        await navigator.clipboard.writeText(messageFor(next));
+        setShownNote('New passcode made, and the message is copied.');
+      } catch {
+        setShownNote('New passcode made. Press Copy message to copy it.'); // some browsers only copy on a direct click
+      }
+    }
     load();
   }
 
@@ -202,10 +224,7 @@ export function ShareLinks() {
     load();
   }
 
-  const message = shown?.passcode
-    ? `Here is the Che Bar business summary, as agreed under the NDA:\n${shown.url}\n\nPasscode: ${shown.passcode}\n\n` +
-      `The link works until ${arubaDay(shown.expires_at)} and is for you only. Please don't share or forward it.`
-    : '';
+  const message = shown?.passcode ? messageFor(shown) : '';
 
   return (
     <section className="mt-10">
@@ -226,21 +245,30 @@ export function ShareLinks() {
               <p><span className="text-neutral-500">Passcode: </span><span className="font-mono text-lg tracking-widest">{shown.passcode}</span></p>
             ) : (
               <p className="text-neutral-600">
-                This link was made before passcodes were saved, so its passcode can’t be shown. Give it a new one with the button
-                below; the old one then stops working.
+                This link was made before passcodes were saved, so its passcode can’t be shown. Copy message gives it a new one
+                and copies the message with it; the old passcode then stops working.
               </p>
             )}
             <p className="text-neutral-500">Works until {arubaDay(shown.expires_at)}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <CopyButton text={shown.url} label="Copy link" />
-            {shown.passcode && <CopyButton text={shown.passcode} label="Copy passcode" />}
-            {shown.passcode && <CopyButton text={message} label="Copy message" />}
-            <button type="button" onClick={newPasscode} className={smallButton}>
+            {shown.passcode ? (
+              <>
+                <CopyButton text={shown.passcode} label="Copy passcode" />
+                <CopyButton text={message} label="Copy message" />
+              </>
+            ) : (
+              <button type="button" onClick={() => newPasscode(true)} className={cn(smallButton, 'border-gold bg-gold/20 font-medium')}>
+                <Copy className="w-4 h-4" /> Copy message
+              </button>
+            )}
+            <button type="button" onClick={() => newPasscode()} className={smallButton}>
               <KeyRound className="w-4 h-4" /> New passcode
             </button>
             <button type="button" onClick={() => setShown(null)} className="text-sm px-3 py-2 text-neutral-500">Done</button>
           </div>
+          {shownNote && <p className="text-sm text-emerald-700">{shownNote}</p>}
           <p className="text-[11px] text-neutral-500 leading-snug">Safest: send the link by email and the passcode separately, by WhatsApp or a call.</p>
         </div>
       )}
