@@ -26,11 +26,21 @@ export const SECTION_CHOICES: SectionChoice[] = [
     label: 'Company and permits',
     on: true,
     doc: [
+      { prefix: 'articles-', name: 'Articles of association' },
       { prefix: 'kvk-extract-', name: 'KvK extract' },
       { prefix: 'permit-business-', name: 'Business permit' },
       { prefix: 'permit-female-staff-', name: 'Permission for female staff' },
       { prefix: 'permit-fee-', name: 'Permit fee' },
       { prefix: 'gas-certificate-', name: 'Gas safety certificate' },
+    ],
+  },
+  {
+    key: 'doc-lease',
+    label: 'Leases',
+    on: true,
+    doc: [
+      { prefix: 'lease-a-001a-', name: 'Lease A-001A' },
+      { prefix: 'lease-a-001b-', name: 'Kiosk lease A-001B' },
     ],
   },
 ];
