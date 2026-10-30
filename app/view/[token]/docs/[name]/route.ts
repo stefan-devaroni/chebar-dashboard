@@ -11,8 +11,11 @@ import { docFile } from '@/lib/share-sections';
 // (share_link_views.file). Looks don't count as openings, and keep the visit going (visitStarts).
 
 export const dynamic = 'force-dynamic';
+// Without this Next caches the reads below (a GET-only route that reads before it touches cookies): a link switched
+// off or a group hidden after someone's first look wouldn't stop their documents (seen live, Oct 30)
+export const fetchCache = 'force-no-store';
 
-const message = (text: string, status: number) =>
+const message =(text: string, status: number) =>
   new NextResponse(text, {
     status,
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' },
