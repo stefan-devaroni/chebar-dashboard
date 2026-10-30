@@ -19,6 +19,7 @@ export const SECTION_CHOICES: SectionChoice[] = [
   { key: 'growth', label: 'Room for growth', on: true },
   { key: 'offer', label: 'The offer', on: false },
   { key: 'doc-tax', label: 'Tax returns', on: true, doc: [{ prefix: 'tax-return-', name: 'Tax return' }] },
+  { key: 'doc-payroll-tax', label: 'Payroll tax returns', on: true, doc: [{ prefix: 'payroll-tax-', name: 'Payroll tax return' }] },
   { key: 'doc-bank', label: 'Bank statements', on: true, doc: [{ prefix: 'bank-statement-', name: 'Bank statement' }] },
   { key: 'doc-payroll', label: 'Payslips', on: true, doc: [{ prefix: 'payslips-', name: 'Payslips' }] },
   {
