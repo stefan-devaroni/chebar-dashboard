@@ -17,7 +17,9 @@ export const SECTION_CHOICES: SectionChoice[] = [
   { key: 'staff', label: 'Staff', on: true },
   { key: 'assets', label: 'What comes with it', on: true },
   { key: 'growth', label: 'Room for growth', on: true },
-  { key: 'offer', label: 'The offer', on: false },
+  { key: 'offer', label: 'The offer', on: true }, // a new link shows everything; leave parts out per link (Stefan, Nov 3 2026)
+  // Not a section of its own: the asking price wherever it shows, its tile in At a glance and its line in The offer
+  { key: 'price', label: 'Asking price', on: true },
   { key: 'doc-tax', label: 'Tax returns', on: true, doc: [{ prefix: 'tax-return-', name: 'Tax return' }] },
   { key: 'doc-payroll-tax', label: 'Payroll tax returns', on: true, doc: [{ prefix: 'payroll-tax-', name: 'Payroll tax return' }] },
   { key: 'doc-bank', label: 'Bank statements', on: true, doc: [{ prefix: 'bank-statement-', name: 'Bank statement' }] },
