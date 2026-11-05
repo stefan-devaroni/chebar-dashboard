@@ -149,6 +149,25 @@ export interface SalesData {
   products: ProductTotal[];
 }
 
+// Pizzas are found by name, because Revel's groups can't tell: the Product Mix PDFs emailed since Oct 22 2026 group
+// items by class, so pizzas come in as "Food", and the "Pizza" category in the exports before that also held the
+// empanadas, burgers and wings. A product counts when its name is one of these (also when staff typed it in, in any
+// case) or has the word "pizza" in it (Nutella Pizza, Pizza local special, a typed "cheese pizza"). Not pizzas:
+// Al Caballo was a chicken milanesa (Stefan, Nov 5 2026), and Napoletana, gone since May like it, is taken to be one
+// too. A new pizza without "pizza" in its name needs adding here, and so do combos with pizzas once they're on the POS.
+const PIZZAS = new Set([
+  'americana', 'aruba loves you', 'funghi', 'happy island', 'hawaiian', 'margherita', 'marinara', 'pepperoni',
+  'prosciutto rucula', 'prosciutto rucola', 'proscuitto rucula', 'vegetarian delight',
+]);
+
+export function isPizza(name: string): boolean {
+  const plain = name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); // "Margherita**" → "margherita"
+  return PIZZAS.has(plain) || /\bpizzas?\b/.test(plain);
+}
+
+/** Pizzas in a period's product mix */
+export const pizzasSold = (products: ProductTotal[]) => products.reduce((n, p) => n + (isPizza(p.name) ? p.quantity : 0), 0);
+
 export function totals(days: SalesDay[]) {
   const sum = (key: keyof Omit<SalesDay, 'date'>) => days.reduce((s, d) => s + (Number(d[key]) || 0), 0);
   return {

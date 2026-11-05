@@ -5,7 +5,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recha
 import { ArrowDownRight, ArrowUpRight, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { addDays } from '@/lib/reservations';
-import { PERIODS, datesIn, money, rangeLabel, shortDate, totals, type Period, type ProductTotal, type SalesData } from '@/lib/sales';
+import { PERIODS, datesIn, money, pizzasSold, rangeLabel, shortDate, totals, type Period, type ProductTotal, type SalesData } from '@/lib/sales';
 
 // Sales tab: pick a period, see total sales against the comparison period, a daily (or, for the
 // year, monthly) chart, the split by time of day and the products sold. Periods load once each.
@@ -102,6 +102,11 @@ function PeriodSales({ data, today }: { data: SalesData; today: string }) {
   if (t.orders > 0) stats.push(['Orders', t.orders.toLocaleString('en-US')], ['Average order', money(t.revenue / t.orders, true)]);
   if (t.guests > 0) stats.push(['Guests', t.guests.toLocaleString('en-US')], ['Per guest', money(t.revenue / t.guests, true)]);
   if (reported.size > 1) stats.push(['Average day', money(t.revenue / reported.size)]);
+  // From the product mix, which Revel sends separately: only when it's in, and saying so when days are missing
+  if (data.productDays > 0) {
+    const label = data.productDays < reported.size ? `Pizzas (${data.productDays} of ${reported.size} days)` : 'Pizzas';
+    stats.push([label, qty(pizzasSold(data.products))]);
+  }
 
   return (
     <div className="space-y-4">
