@@ -4,18 +4,28 @@ import { parseRevelCsv } from '@/lib/revel-parser';
 import Anthropic from '@anthropic-ai/sdk';
 import { AI_MODEL } from '@/lib/ai';
 import { readInboundEmail, type InboundFile } from '@/lib/inbound-email';
+import { checkSender, ownerAddresses, readSenderAuth, senderAuthLog } from '@/lib/inbound-sender';
 import { readRevelCsv, saveRevelReport } from '@/lib/revel-reports';
 import { arubaNow } from '@/lib/reservations';
 
 // SendGrid Inbound Parse webhook endpoint for mail to anything@ingest.chebararuba.com
 // (MX -> mx.sendgrid.net). Receives multipart/form-data with email fields + attachments.
+// Only mail from Revel's report address and the owners' own addresses is read (lib/inbound-sender.ts).
 // Docs: https://docs.sendgrid.com/for-developers/parsing-email/setting-up-the-inbound-parse-webhook
 
+// What every report_ingestions row of one email shares
+interface Logged {
+  sender_email: string;
+  subject: string;
+  sender_auth: ReturnType<typeof senderAuthLog>;
+}
+
 export async function POST(request: NextRequest) {
-  // Verify shared secret (passed as query param or header)
+  // The shared secret in SendGrid's webhook URL. A post without it isn't from SendGrid, and neither
+  // are the SPF/DKIM results in it, so without INGEST_EMAIL_SECRET set everything is refused.
   const secret = request.nextUrl.searchParams.get('secret');
   const expectedSecret = process.env.INGEST_EMAIL_SECRET;
-  if (expectedSecret && secret !== expectedSecret) {
+  if (!expectedSecret || secret !== expectedSecret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -28,13 +38,33 @@ export async function POST(request: NextRequest) {
 
     const from = (formData.get('from') as string) ?? '';
     const subject = (formData.get('subject') as string) ?? '';
+
+    // Only Revel's reports and the owners' own mail may add numbers. Checked before any attachment
+    // is opened (lib/inbound-sender.ts); what SPF and DKIM said is kept with every row.
+    const auth = readSenderAuth(formData);
+    const { data: owners } = await supabase.from('team_members').select('email, role, active').eq('role', 'owner');
+    const sender = checkSender(from, auth, ownerAddresses(owners ?? [], process.env.ALLOWED_EMAILS));
+    const logged: Logged = { sender_email: from, subject, sender_auth: senderAuthLog(auth, sender) };
+
+    if (!sender.ok) {
+      await supabase.from('report_ingestions').insert({
+        ...logged,
+        report_type: 'unknown',
+        status: 'skipped',
+        file_name: null,
+        records_written: 0,
+        error_message: sender.reason,
+      });
+      // A 200, or SendGrid would keep sending it again
+      return NextResponse.json({ status: 'skipped', reason: sender.reason });
+    }
+
     const { files, text: textBody } = await readInboundEmail(formData);
 
     // If no attachments, keep the body and the fields SendGrid sent, to see what arrived
     if (files.length === 0) {
       await supabase.from('report_ingestions').insert({
-        sender_email: from,
-        subject,
+        ...logged,
         report_type: 'unknown',
         status: 'skipped',
         file_name: null,
@@ -63,7 +93,7 @@ export async function POST(request: NextRequest) {
         attachment.type === 'application/pdf' || fileName.endsWith('.pdf');
 
       if (isPDF) {
-        const pdfResult = await parsePdfWithClaude(attachment, from, subject, supabase, filePath);
+        const pdfResult = await parsePdfWithClaude(attachment, logged, supabase, filePath);
         results.push(pdfResult);
         continue;
       }
@@ -72,8 +102,7 @@ export async function POST(request: NextRequest) {
         const rawPreview = new TextDecoder('utf-8', { fatal: false }).decode(attachment.bytes).slice(0, 2000);
 
         await supabase.from('report_ingestions').insert({
-          sender_email: from,
-          subject,
+          ...logged,
           report_type: 'unknown',
           status: 'skipped',
           file_name: fileName,
@@ -96,8 +125,7 @@ export async function POST(request: NextRequest) {
         const saved = await saveRevelReport(supabase, revel, { source: 'revel-email', ingestionId });
         await supabase.from('report_ingestions').insert({
           id: ingestionId,
-          sender_email: from,
-          subject,
+          ...logged,
           report_type: revel.kind === 'sales_summary' ? 'daily_sales' : 'product_mix',
           status: saved.errors.length > 0 ? 'failed' : 'processed',
           file_name: fileName,
@@ -143,8 +171,7 @@ export async function POST(request: NextRequest) {
         }
 
         await supabase.from('report_ingestions').insert({
-          sender_email: from,
-          subject,
+          ...logged,
           report_type: 'daily_sales',
           status: errors.length > 0 ? 'failed' : 'processed',
           file_name: fileName,
@@ -165,8 +192,7 @@ export async function POST(request: NextRequest) {
           .join('\n');
 
         await supabase.from('report_ingestions').insert({
-          sender_email: from,
-          subject,
+          ...logged,
           report_type: 'product_mix',
           status: 'processed',
           file_name: fileName,
@@ -180,8 +206,7 @@ export async function POST(request: NextRequest) {
 
       } else {
         await supabase.from('report_ingestions').insert({
-          sender_email: from,
-          subject,
+          ...logged,
           report_type: 'unknown',
           status: 'skipped',
           file_name: fileName,
@@ -213,8 +238,7 @@ async function keepOriginal(supabase: any, file: InboundFile): Promise<string | 
 
 async function parsePdfWithClaude(
   attachment: InboundFile,
-  from: string,
-  subject: string,
+  logged: Logged,
   supabase: any,
   filePath: string | null
 ) {
@@ -238,7 +262,7 @@ async function parsePdfWithClaude(
           {
             type: 'text',
             text: `Extract structured data from this Revel POS restaurant report PDF.
-(Email subject: "${subject.slice(0, 200)}". File name: "${fileName.slice(0, 200)}". These may help with the report date.)
+(Email subject: "${logged.subject.slice(0, 200)}". File name: "${fileName.slice(0, 200)}". These may help with the report date.)
 
 Determine the report type and return ONLY valid JSON (no markdown, no backticks):
 
@@ -329,8 +353,7 @@ Rules:
       }
 
       await supabase.from('report_ingestions').insert({
-        sender_email: from,
-        subject,
+        ...logged,
         report_type: 'daily_sales',
         status: errors.length > 0 ? 'failed' : 'processed',
         file_name: fileName,
@@ -359,8 +382,7 @@ Rules:
 
       await supabase.from('report_ingestions').insert({
         id: ingestionId,
-        sender_email: from,
-        subject,
+        ...logged,
         report_type: 'product_mix',
         status: saved?.error ? 'failed' : 'processed',
         file_name: fileName,
@@ -380,8 +402,7 @@ Rules:
 
     } else {
       await supabase.from('report_ingestions').insert({
-        sender_email: from,
-        subject,
+        ...logged,
         report_type: 'unknown',
         status: 'processed',
         file_name: fileName,
@@ -395,8 +416,7 @@ Rules:
     }
   } catch {
     await supabase.from('report_ingestions').insert({
-      sender_email: from,
-      subject,
+      ...logged,
       report_type: 'unknown',
       status: 'failed',
       file_name: fileName,
