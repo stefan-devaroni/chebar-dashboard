@@ -41,6 +41,7 @@ export interface ApplicantReview {
   interview?: string;
   best?: string; // the position the profile fits best
   fit?: Record<string, { pick: PickLevel; take: string }>; // keyed by position
+  score?: number; // 0–100, Claude's overall fit: orders people within the same pick
 }
 
 export interface Fit {
@@ -70,6 +71,22 @@ export function bestFit(app: Pick<JobApplication, 'review' | 'positions'>): Fit 
 export function pickRank(app: Pick<JobApplication, 'review'>, position: string): number {
   const f = fitFor(app, position);
   return f ? PICK_RANK[f.pick] : 5;
+}
+
+export function fitScore(app: Pick<JobApplication, 'review'>): number {
+  const s = app.review?.score;
+  return typeof s === 'number' && Number.isFinite(s) ? s : -1;
+}
+
+// "Best fit" order: the pick shown in the list (Top pick first), then Claude's score. People marked
+// Not a fit go last, and anyone without a review sits after the reviewed ones.
+export function compareFit(a: Pick<JobApplication, 'review' | 'positions' | 'status' | 'name'>, b: Pick<JobApplication, 'review' | 'positions' | 'status' | 'name'>): number {
+  const out = (x: { status: ApplicationStatus }) => (x.status === 'not_a_fit' ? 1 : 0);
+  const rank = (x: Pick<JobApplication, 'review' | 'positions'>) => {
+    const f = bestFit(x);
+    return f ? PICK_RANK[f.pick] : 5;
+  };
+  return out(a) - out(b) || rank(a) - rank(b) || fitScore(b) - fitScore(a) || a.name.localeCompare(b.name);
 }
 
 export interface JobApplication {

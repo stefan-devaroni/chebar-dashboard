@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 import { copyText } from '@/lib/clipboard';
 import {
   bestFit,
+  compareFit,
+  fitScore,
   fits,
   JOB_FAIR_POSITIONS,
   PICK_LABELS,
@@ -49,6 +51,13 @@ const positionOrder = (p: string) => {
   return i === -1 ? POSITION_ORDER.length : i;
 };
 
+type ListOrder = 'fit' | 'newest' | 'job';
+const ORDERS: [ListOrder, string][] = [
+  ['fit', 'Best fit'],
+  ['newest', 'Newest'],
+  ['job', 'By job'],
+];
+
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const longDate = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 const checkedAt = (iso: string) =>
@@ -72,7 +81,8 @@ export function ApplicantsView({
   const [apps, setApps] = useState(initialApplications);
   const [filter, setFilter] = useState<ApplicationStatus | 'all'>('all');
   const [source, setSource] = useState<ApplicationSource | 'all'>('all');
-  const [byJob, setByJob] = useState(false);
+  // Best fit first whenever Claude has reviewed anyone
+  const [order, setOrder] = useState<ListOrder>(() => (initialApplications.some((a) => a.review) ? 'fit' : 'newest'));
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [copied, setCopied] = useState(false);
@@ -106,9 +116,13 @@ export function ApplicantsView({
       .sort(([a], [b]) => positionOrder(a) - positionOrder(b) || a.localeCompare(b))
       .map(([position, list]) => ({
         position,
-        list: list.sort((a, b) => pickRank(a, position) - pickRank(b, position) || b.created_at.localeCompare(a.created_at)),
+        list: list.sort((a, b) => pickRank(a, position) - pickRank(b, position) || fitScore(b) - fitScore(a) || b.created_at.localeCompare(a.created_at)),
       }));
   }, [shown]);
+
+  // "Best fit": one list from best to worst. The number is the place among everyone, so it stays the same when filtering.
+  const ranks = useMemo(() => new Map([...apps].sort(compareFit).map((a, i) => [a.id, i + 1])), [apps]);
+  const byFit = useMemo(() => [...shown].sort(compareFit), [shown]);
 
   // Claude's top and strong picks per job fair job
   const picks = useMemo(() => {
@@ -118,7 +132,7 @@ export function ApplicantsView({
       list: fair
         .map((a) => ({ a, f: fits(a).find((f) => f.position === position) }))
         .filter((x): x is { a: JobApplication; f: Fit } => !!x.f && (x.f.pick === 'top' || x.f.pick === 'strong'))
-        .sort((x, y) => pickRank(x.a, position) - pickRank(y.a, position) || x.a.name.localeCompare(y.a.name)),
+        .sort((x, y) => pickRank(x.a, position) - pickRank(y.a, position) || fitScore(y.a) - fitScore(x.a) || x.a.name.localeCompare(y.a.name)),
     })).filter((g) => g.list.length > 0);
   }, [apps]);
 
@@ -198,12 +212,11 @@ export function ApplicantsView({
             ))}
           </div>
           <div className="flex rounded-full border border-neutral-200 bg-white p-0.5 text-sm" role="group" aria-label="List order">
-            <button onClick={() => setByJob(false)} aria-pressed={!byJob} className={cn('px-3 py-1.5 rounded-full', !byJob ? 'bg-ink text-cream' : 'text-neutral-600')}>
-              Newest
-            </button>
-            <button onClick={() => setByJob(true)} aria-pressed={byJob} className={cn('px-3 py-1.5 rounded-full', byJob ? 'bg-ink text-cream' : 'text-neutral-600')}>
-              By job
-            </button>
+            {ORDERS.map(([key, text]) => (
+              <button key={key} onClick={() => setOrder(key)} aria-pressed={order === key} className={cn('px-3 py-1.5 rounded-full whitespace-nowrap', order === key ? 'bg-ink text-cream' : 'text-neutral-600')}>
+                {text}
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -228,7 +241,16 @@ export function ApplicantsView({
           <p className="text-sm text-neutral-600">{apps.length === 0 ? 'No applications yet.' : 'No applicants match.'}</p>
           {apps.length === 0 && <p className="text-xs text-neutral-400 mt-1">They arrive here from chebararuba.com/careers.</p>}
         </div>
-      ) : byJob ? (
+      ) : order === 'fit' ? (
+        <div>
+          <p className="text-xs text-neutral-500 mb-2">Claude&rsquo;s order, best fit first. People you mark Not a fit move to the bottom.</p>
+          <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100 overflow-hidden">
+            {byFit.map((a) => (
+              <ApplicantRow key={a.id} app={a} rank={ranks.get(a.id)} onOpen={() => setOpenId(a.id)} />
+            ))}
+          </div>
+        </div>
+      ) : order === 'job' ? (
         <div className="space-y-6">
           {groups.map((g) => (
             <section key={g.position}>
@@ -257,10 +279,22 @@ export function ApplicantsView({
   );
 }
 
-function ApplicantRow({ app, position, onOpen }: { app: JobApplication; position?: string; onOpen: () => void }) {
+function ApplicantRow({ app, position, rank, onOpen }: { app: JobApplication; position?: string; rank?: number; onOpen: () => void }) {
   const fit = position ? fits(app).find((f) => f.position === position) ?? null : bestFit(app);
+  const detail = position
+    ? fit?.take || app.positions.join(', ')
+    : rank !== undefined && fit
+      ? (
+          <>
+            {fit.position}
+            {/* Too long to read on a phone; the sheet has it */}
+            {fit.take && <span className="hidden sm:inline"> · {fit.take}</span>}
+          </>
+        )
+      : `${app.positions.join(', ')} · ${shortDate(app.created_at)}`;
   return (
-    <button onClick={onOpen} className="w-full flex items-center gap-3 px-4 py-3 min-h-[64px] text-left active:bg-neutral-50">
+    <button onClick={onOpen} className={cn('w-full flex items-center gap-3 py-3 min-h-[64px] text-left active:bg-neutral-50', rank !== undefined ? 'pl-2 pr-4 sm:pl-3' : 'px-4')}>
+      {rank !== undefined && <span className="w-6 shrink-0 text-right text-sm tabular-nums text-neutral-400">{rank}</span>}
       <span className="flex-1 min-w-0">
         <span className="flex items-center gap-1.5">
           <span className="font-medium truncate">{app.name}</span>
@@ -269,9 +303,7 @@ function ApplicantRow({ app, position, onOpen }: { app: JobApplication; position
         </span>
         <span className="flex items-center gap-1.5 text-xs text-neutral-500 min-w-0 mt-0.5">
           {fit && <PickBadge pick={fit.pick} />}
-          <span className="truncate">
-            {position ? (fit?.take || app.positions.join(', ')) : `${app.positions.join(', ')} · ${shortDate(app.created_at)}`}
-          </span>
+          <span className="truncate">{detail}</span>
         </span>
       </span>
       <span className={cn('shrink-0 text-xs px-2.5 py-1 rounded-full border', STATUS_STYLES[app.status])}>{STATUS_LABELS[app.status]}</span>
