@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getSessionInfo } from '@/lib/roles';
 import { sendEmail } from '@/lib/email';
 import { cancellationEmail, confirmationEmail, updatedEmail } from '@/lib/reservation-emails';
-import { addDays, arubaNow, isDate, parseStaffBooking } from '@/lib/reservations';
+import { addDays, arubaNow, asLang, isDate, parseStaffBooking } from '@/lib/reservations';
 import { RESERVATION_COLUMNS } from '@/lib/reservations-server';
 
 // Staff side of reservations (managers and employees). With `notify: true` and
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     body.notify && data.email
       ? await sendEmail({
           to: data.email,
-          ...confirmationEmail({ date: data.date, time: data.time, party: data.party_size, name: data.name, token }),
+          ...confirmationEmail({ date: data.date, time: data.time, party: data.party_size, name: data.name, token, lang: asLang(data.lang) }),
         })
       : false;
   return NextResponse.json({ ...data, emailed });
@@ -105,7 +105,7 @@ export async function PUT(request: NextRequest) {
 
   let emailed = false;
   if (notify && data.email) {
-    const details = { date: data.date, time: data.time, party: data.party_size, name: data.name };
+    const details = { date: data.date, time: data.time, party: data.party_size, name: data.name, lang: asLang(data.lang) };
     const moved = data.date !== before.date || data.time !== before.time || data.party_size !== before.party_size;
     let message: { subject: string; html: string; text: string } | null = null;
     if (data.status === 'cancelled' && before.status !== 'cancelled') message = cancellationEmail(details);

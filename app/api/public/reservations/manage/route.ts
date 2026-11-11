@@ -4,7 +4,7 @@ import { notifyOwner } from '@/lib/notify';
 import { addNotification } from '@/lib/notifications';
 import { RESTAURANT_EMAIL, sendEmail } from '@/lib/email';
 import { cancellationEmail } from '@/lib/reservation-emails';
-import { arubaNow, formatDate, formatTime, toMinutes } from '@/lib/reservations';
+import { arubaNow, asLang, formatDate, formatTime, toMinutes } from '@/lib/reservations';
 import { corsHeaders } from '@/lib/reservations-server';
 
 // The guest's "change or cancel" link: POST { token, action: 'get' | 'cancel' }.
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   const supabase = createClient();
   const { data: r, error } = await supabase
     .from('reservations')
-    .select('id, date, time, party_size, name, email, status')
+    .select('id, date, time, party_size, name, email, status, lang')
     .eq('manage_token', token)
     .maybeSingle();
   if (error) {
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     return json(request, { error: `Something went wrong. Please email us at ${RESTAURANT_EMAIL}.`, code: 'unavailable' }, 503);
   }
 
-  const details = { date: r.date, time: r.time, party: r.party_size, name: r.name };
+  const details = { date: r.date, time: r.time, party: r.party_size, name: r.name, lang: asLang(r.lang) };
   await Promise.all([
     r.email ? sendEmail({ to: r.email, ...cancellationEmail(details) }) : Promise.resolve(false),
     notifyOwner({

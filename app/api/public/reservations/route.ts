@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
     p_manage_token: token,
     p_client_ref: b.clientRef,
     p_ip_hash: ipHash,
+    p_lang: b.lang,
   });
   if (error) {
     if (/slot_full/.test(error.message)) return json(request, SLOT_FULL, 409);
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
     const sent = r.email
       ? sendEmail({
           to: r.email,
-          ...confirmationEmail({ date: r.date, time: r.time, party: r.party_size, name: r.name, token: r.manage_token }),
+          ...confirmationEmail({ date: r.date, time: r.time, party: r.party_size, name: r.name, token: r.manage_token, lang: r.lang }),
         })
       : Promise.resolve(false);
     const alert = notifyOwner({

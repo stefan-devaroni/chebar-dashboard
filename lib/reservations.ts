@@ -4,6 +4,9 @@
 
 export type ReservationStatus = 'confirmed' | 'seated' | 'no_show' | 'cancelled';
 export type ReservationSource = 'online' | 'staff';
+// The guest's language: bookings from chebararuba.com/es/reservar/ are 'es' and get Spanish emails
+export type Lang = 'en' | 'es';
+export const asLang = (v: unknown): Lang => (v === 'es' ? 'es' : 'en');
 
 export interface Reservation {
   id: string;
@@ -16,6 +19,7 @@ export interface Reservation {
   notes: string | null;
   status: ReservationStatus;
   source: ReservationSource;
+  lang: Lang;
   created_at: string;
 }
 
@@ -84,8 +88,9 @@ export function formatTime(t: string): string {
   return `${h12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-export function formatDate(date: string, style: 'short' | 'long' = 'short'): string {
-  return new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', {
+// 'Thu, Nov 12' / 'Thursday, November 12'; in Spanish 'jue, 12 nov' / 'jueves, 12 de noviembre'
+export function formatDate(date: string, style: 'short' | 'long' = 'short', lang: Lang = 'en'): string {
+  return new Date(date + 'T12:00:00Z').toLocaleDateString(lang === 'es' ? 'es' : 'en-US', {
     weekday: style,
     month: style,
     day: 'numeric',
@@ -208,6 +213,7 @@ export interface GuestBooking {
   email: string; // confirmations go by email
   notes: string | null;
   clientRef: string | null;
+  lang: Lang; // language of the page they booked on
 }
 
 // Validate what a guest typed on the booking page
@@ -232,7 +238,7 @@ export function parseGuestBooking(body: any): { ok: true; value: GuestBooking } 
 
   return {
     ok: true,
-    value: { date: body.date, time: body.time, party, name, phone: phone || null, email, notes: notes || null, clientRef },
+    value: { date: body.date, time: body.time, party, name, phone: phone || null, email, notes: notes || null, clientRef, lang: asLang(body?.lang) },
   };
 }
 

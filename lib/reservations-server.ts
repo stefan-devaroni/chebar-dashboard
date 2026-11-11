@@ -4,7 +4,7 @@ import { normalizeSettings, type ReservationSettings } from '@/lib/reservations'
 
 // Staff-facing columns (never the guest's manage token or the hashed IP)
 export const RESERVATION_COLUMNS =
-  'id, date, time, party_size, name, phone, email, notes, status, source, created_at';
+  'id, date, time, party_size, name, phone, email, notes, status, source, lang, created_at';
 
 // The public website is the only browser origin allowed to call the booking API
 const SITE_ORIGINS = ['https://chebararuba.com', 'https://www.chebararuba.com'];
